@@ -152,21 +152,6 @@ ${xpathSkills}`;
     // Clean response
     let selector: string = aiResponse.response.trim();
 
-    // // Remove thought / channel blocks by scanning for known closing markers
-    // const markers: string[] = ['<channel|>', '</thought>', '</details>', '<|channel|>', '<|channel>', '<channel>'];
-    // for (const marker of markers) {
-    //     const lastIdx: number = selector.lastIndexOf(marker);
-    //     if (lastIdx !== -1) {
-    //         selector = selector.slice(lastIdx + marker.length).trim();
-    //         break;
-    //     }
-    // }
-
-    // // Remove <thought>...</thought> block entirely if present
-    // selector = selector.replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
-    // // Remove <details>...</details> block entirely if present
-    // selector = selector.replace(/<details>[\s\S]*?<\/details>/gi, '').trim();
-
     // Strip codeblock indicators if present (e.g. ```xpath, ```css, ```)
     selector = selector.replace(/```(xpath|css|javascript|typescript|html)?/gi, '').replace(/```/g, '').trim();
 

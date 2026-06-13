@@ -23,6 +23,22 @@ test.describe("AI Locator Tests", () => {
         await page.waitForURL("**/inventory.html");
         const inventoryContainer: Locator = await aiLocator("inventory container or list");
         await expect(inventoryContainer).toBeVisible();
+
+        // Add 2 items to cart using AI locators
+        const addBackpackBtn: Locator = await aiLocator("add to cart button for Sauce Labs Backpack");
+        await addBackpackBtn.click();
+
+        const addBikeLightBtn: Locator = await aiLocator("add to cart button for Sauce Labs Bike Light");
+        await addBikeLightBtn.click();
+
+        // Go to cart
+        const cartLink: Locator = await aiLocator("shopping cart link");
+        await cartLink.click();
+
+        // Verify that we are on the cart page and see the items
+        await page.waitForURL("**/cart.html");
+        const cartList: Locator = await aiLocator("cart list container");
+        await expect(cartList).toBeVisible();
     });
 
     test('negative login feedback with incorrect username and password', async ({ page, aiLocator }) => {

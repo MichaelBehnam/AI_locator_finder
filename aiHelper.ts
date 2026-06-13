@@ -148,7 +148,7 @@ Additional reference guidelines:
 ${xpathSkills}`;
 
     const aiResponse = await askQuestion(prompt);
-    console.log(`RAW AI RESPONSE for "${description}":`, JSON.stringify(aiResponse.response));
+    // console.log(`RAW AI RESPONSE for "${description}":`, JSON.stringify(aiResponse.response)); // use for debugging LLM only
     
     // Clean response
     let selector = aiResponse.response.trim();

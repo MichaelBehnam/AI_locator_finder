@@ -4,30 +4,30 @@ import * as fs from "fs";
 import * as path from "path";
 import { AIResponseDTO } from "./aiResponse.dto";
 
-function loadAndInitEnv() {
-    const envPath = path.join(__dirname, ".env");
+function loadAndInitEnv(): void {
+    const envPath: string = path.join(__dirname, ".env");
     const defaults: Record<string, string> = {
         MODEL_NAME: "google/gemma-4-e4b",
         AI_IP: "127.0.0.1",
         AI_PORT: "1234"
     };
 
-    let existingEnvContent = "";
+    let existingEnvContent: string = "";
     const parsed: Record<string, string> = {};
 
     if (fs.existsSync(envPath)) {
         existingEnvContent = fs.readFileSync(envPath, "utf8");
         // Parse existing env variables
-        const lines = existingEnvContent.split(/\r?\n/);
+        const lines: string[] = existingEnvContent.split(/\r?\n/);
         for (const line of lines) {
-            const trimmed = line.trim();
+            const trimmed: string = line.trim();
             if (!trimmed || trimmed.startsWith("#")) {
                 continue;
             }
-            const equalsIndex = trimmed.indexOf("=");
+            const equalsIndex: number = trimmed.indexOf("=");
             if (equalsIndex !== -1) {
-                const key = trimmed.slice(0, equalsIndex).trim();
-                let value = trimmed.slice(equalsIndex + 1).trim();
+                const key: string = trimmed.slice(0, equalsIndex).trim();
+                let value: string = trimmed.slice(equalsIndex + 1).trim();
                 // strip quotes if any
                 if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
                     value = value.slice(1, -1).trim();
@@ -40,12 +40,12 @@ function loadAndInitEnv() {
     }
 
     // Identify missing keys
-    const missingKeys = Object.keys(defaults).filter(key => !(key in parsed));
+    const missingKeys: string[] = Object.keys(defaults).filter(key => !(key in parsed));
 
     if (missingKeys.length > 0) {
-        let newLines = "";
+        let newLines: string = "";
         for (const key of missingKeys) {
-            const value = defaults[key];
+            const value: string = defaults[key];
             parsed[key] = value;
             newLines += `${key}=${value}\n`;
         }
@@ -53,7 +53,7 @@ function loadAndInitEnv() {
         // Write or append
         if (existingEnvContent) {
             // Ensure there's a trailing newline before appending
-            const separator = existingEnvContent.endsWith("\n") ? "" : "\n";
+            const separator: string = existingEnvContent.endsWith("\n") ? "" : "\n";
             fs.appendFileSync(envPath, separator + newLines, "utf8");
         } else {
             fs.writeFileSync(envPath, newLines, "utf8");
@@ -79,12 +79,12 @@ loadAndInitEnv();
  * @returns The parsed text response from the AI.
  */
 export async function askQuestion(question: string): Promise<AIResponseDTO> {
-    const modelName = process.env.MODEL_NAME || 'google/gemma-4-e4b';
-    const ip = process.env.AI_IP || '127.0.0.1';
-    const port = process.env.AI_PORT || '1234';
+    const modelName: string = process.env.MODEL_NAME || 'google/gemma-4-e4b';
+    const ip: string = process.env.AI_IP || '127.0.0.1';
+    const port: string = process.env.AI_PORT || '1234';
 
     // Initialize the LM Studio client to point to the host/port from env
-    const client = new LMStudioClient({
+    const client: LMStudioClient = new LMStudioClient({
         baseUrl: `ws://${ip}:${port}`
     });
 
@@ -95,8 +95,8 @@ export async function askQuestion(question: string): Promise<AIResponseDTO> {
         // Send the prompt and wait for the response
         const result = await model.respond(question);
 
-        const incomingTokens = result.stats?.promptTokensCount ?? 0;
-        const outgoingTokens = result.stats?.predictedTokensCount ?? 0;
+        const incomingTokens: number = result.stats?.promptTokensCount ?? 0;
+        const outgoingTokens: number = result.stats?.predictedTokensCount ?? 0;
         console.log(`Tokens - Incoming: ${incomingTokens}, Outgoing: ${outgoingTokens}`);
 
         // Return the DTO
@@ -105,7 +105,7 @@ export async function askQuestion(question: string): Promise<AIResponseDTO> {
             incomingTokens,
             outgoingTokens
         };
-    } catch (error) {
+    } catch (error: unknown) {
         console.error("Error asking question via LM Studio SDK:", error);
         throw error;
     }
@@ -121,17 +121,17 @@ export async function askQuestion(question: string): Promise<AIResponseDTO> {
 export async function getLocatorFromAi(page: Page, description: string): Promise<Locator> {
     console.log(`Generating locator for: "${description}"`);
     
-    const html = await page.content();
+    const html: string = await page.content();
     
-    let xpathSkills = "";
+    let xpathSkills: string = "";
     try {
-        const xpathSkillsPath = path.join(__dirname, "skills", "get-xpath.md");
+        const xpathSkillsPath: string = path.join(__dirname, "skills", "get-xpath.md");
         xpathSkills = fs.readFileSync(xpathSkillsPath, "utf8");
-    } catch (error) {
+    } catch (error: unknown) {
         console.warn("Could not read skills/get-xpath.md guidelines, proceeding without it:", error);
     }
 
-    const prompt = `You are a helper that finds a Playwright locator/selector for a given element in the HTML.
+    const prompt: string = `You are a helper that finds a Playwright locator/selector for a given element in the HTML.
 Given the following HTML of the page:
 ${html}
 
@@ -147,16 +147,16 @@ Do not include any other text, markdown formatting (like code blocks with \`\`\`
 Additional reference guidelines:
 ${xpathSkills}`;
 
-    const aiResponse = await askQuestion(prompt);
+    const aiResponse: AIResponseDTO = await askQuestion(prompt);
     // console.log(`RAW AI RESPONSE for "${description}":`, JSON.stringify(aiResponse.response)); // use for debugging LLM only
     
     // Clean response
-    let selector = aiResponse.response.trim();
+    let selector: string = aiResponse.response.trim();
     
     // Remove thought / channel blocks by scanning for known closing markers
-    const markers = ['<channel|>', '</thought>', '</details>', '<|channel|>', '<|channel>', '<channel>'];
+    const markers: string[] = ['<channel|>', '</thought>', '</details>', '<|channel|>', '<|channel>', '<channel>'];
     for (const marker of markers) {
-        const lastIdx = selector.lastIndexOf(marker);
+        const lastIdx: number = selector.lastIndexOf(marker);
         if (lastIdx !== -1) {
             selector = selector.slice(lastIdx + marker.length).trim();
             break;
@@ -172,7 +172,7 @@ ${xpathSkills}`;
     selector = selector.replace(/```(xpath|css|javascript|typescript|html)?/gi, '').replace(/```/g, '').trim();
     
     // Split by lines and take the first non-empty line
-    const lines = selector.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    const lines: string[] = selector.split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
     if (lines.length > 0) {
         selector = lines[0];
     }

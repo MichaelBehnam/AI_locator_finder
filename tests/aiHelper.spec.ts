@@ -10,14 +10,17 @@ test.describe('AI Helper', () => {
     const question = 'Please reply with exactly the words: "Hello, World!"';
 
     try {
-      const response = await askQuestion(question);
+      const result = await askQuestion(question);
       
-      console.log('AI Response:', response);
+      console.log('AI Response:', result);
       
-      // Basic assertions to ensure we got a valid text response back
-      expect(response).toBeDefined();
-      expect(typeof response).toBe('string');
-      expect(response.length).toBeGreaterThan(0);
+      // Basic assertions to ensure we got a valid response back
+      expect(result).toBeDefined();
+      expect(result.response).toBeDefined();
+      expect(typeof result.response).toBe('string');
+      expect(result.response.length).toBeGreaterThan(0);
+      expect(typeof result.incomingTokens).toBe('number');
+      expect(typeof result.outgoingTokens).toBe('number');
       
     } catch (error) {
       console.error(

@@ -7,7 +7,13 @@ import { LMStudioClient } from "@lmstudio/sdk";
  * @param question The text question to ask the AI.
  * @returns The parsed text response from the AI.
  */
-export async function askQuestion(question: string): Promise<string> {
+export interface AIResponseDTO {
+    response: string;
+    incomingTokens: number;
+    outgoingTokens: number;
+}
+
+export async function askQuestion(question: string): Promise<AIResponseDTO> {
     const modelName = 'google/gemma-4-e4b';
     // Initialize the LM Studio client to point to localhost on port 1234
     const client = new LMStudioClient({
@@ -21,8 +27,12 @@ export async function askQuestion(question: string): Promise<string> {
         // Send the prompt and wait for the response
         const result = await model.respond(question);
 
-        // Parse and return the response as text
-        return result.content;
+        // Return the DTO
+        return {
+            response: result.content,
+            incomingTokens: result.stats.promptTokensCount,
+            outgoingTokens: result.stats.predictedTokensCount
+        };
     } catch (error) {
         console.error("Error asking question via LM Studio SDK:", error);
         throw error;

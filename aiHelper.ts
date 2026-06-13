@@ -3,6 +3,71 @@ import { LMStudioClient } from "@lmstudio/sdk";
 import * as fs from "fs";
 import * as path from "path";
 
+function loadAndInitEnv() {
+    const envPath = path.join(__dirname, ".env");
+    const defaults: Record<string, string> = {
+        MODEL_NAME: "google/gemma-4-e4b",
+        AI_IP: "127.0.0.1",
+        AI_PORT: "1234"
+    };
+
+    let existingEnvContent = "";
+    const parsed: Record<string, string> = {};
+
+    if (fs.existsSync(envPath)) {
+        existingEnvContent = fs.readFileSync(envPath, "utf8");
+        // Parse existing env variables
+        const lines = existingEnvContent.split(/\r?\n/);
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith("#")) {
+                continue;
+            }
+            const equalsIndex = trimmed.indexOf("=");
+            if (equalsIndex !== -1) {
+                const key = trimmed.slice(0, equalsIndex).trim();
+                let value = trimmed.slice(equalsIndex + 1).trim();
+                // strip quotes if any
+                if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+                    value = value.slice(1, -1).trim();
+                }
+                parsed[key] = value;
+            }
+        }
+    }
+
+    // Identify missing keys
+    const missingKeys = Object.keys(defaults).filter(key => !(key in parsed));
+
+    if (missingKeys.length > 0) {
+        let newLines = "";
+        for (const key of missingKeys) {
+            const value = defaults[key];
+            parsed[key] = value;
+            newLines += `${key}=${value}\n`;
+        }
+
+        // Write or append
+        if (existingEnvContent) {
+            // Ensure there's a trailing newline before appending
+            const separator = existingEnvContent.endsWith("\n") ? "" : "\n";
+            fs.appendFileSync(envPath, separator + newLines, "utf8");
+        } else {
+            fs.writeFileSync(envPath, newLines, "utf8");
+        }
+    }
+
+    // Set process.env
+    for (const key in parsed) {
+        if (process.env[key] === undefined) {
+            process.env[key] = parsed[key];
+        }
+    }
+}
+
+// Call env initialization immediately
+loadAndInitEnv();
+
 /**
  * Asks a question to the local AI using the LM Studio SDK.
  * Assumes the LM Studio server is running on localhost port 1234.
@@ -17,10 +82,13 @@ export interface AIResponseDTO {
 }
 
 export async function askQuestion(question: string): Promise<AIResponseDTO> {
-    const modelName = 'google/gemma-4-e4b';
-    // Initialize the LM Studio client to point to localhost on port 1234
+    const modelName = process.env.MODEL_NAME || 'google/gemma-4-e4b';
+    const ip = process.env.AI_IP || '127.0.0.1';
+    const port = process.env.AI_PORT || '1234';
+
+    // Initialize the LM Studio client to point to the host/port from env
     const client = new LMStudioClient({
-        baseUrl: "ws://127.0.0.1:1234"
+        baseUrl: `ws://${ip}:${port}`
     });
 
     try {

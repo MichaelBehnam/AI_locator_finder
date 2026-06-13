@@ -2,6 +2,7 @@ import { Page, Locator } from "@playwright/test";
 import { LMStudioClient } from "@lmstudio/sdk";
 import * as fs from "fs";
 import * as path from "path";
+import { AIResponseDTO } from "./aiResponse.dto";
 
 function loadAndInitEnv() {
     const envPath = path.join(__dirname, ".env");
@@ -34,6 +35,8 @@ function loadAndInitEnv() {
                 parsed[key] = value;
             }
         }
+    } else {
+        console.warn("No .env file found");
     }
 
     // Identify missing keys
@@ -75,12 +78,6 @@ loadAndInitEnv();
  * @param question The text question to ask the AI.
  * @returns The parsed text response from the AI.
  */
-export interface AIResponseDTO {
-    response: string;
-    incomingTokens: number;
-    outgoingTokens: number;
-}
-
 export async function askQuestion(question: string): Promise<AIResponseDTO> {
     const modelName = process.env.MODEL_NAME || 'google/gemma-4-e4b';
     const ip = process.env.AI_IP || '127.0.0.1';
@@ -98,11 +95,15 @@ export async function askQuestion(question: string): Promise<AIResponseDTO> {
         // Send the prompt and wait for the response
         const result = await model.respond(question);
 
+        const incomingTokens = result.stats?.promptTokensCount ?? 0;
+        const outgoingTokens = result.stats?.predictedTokensCount ?? 0;
+        console.log(`Tokens - Incoming: ${incomingTokens}, Outgoing: ${outgoingTokens}`);
+
         // Return the DTO
         return {
             response: result.content,
-            incomingTokens: result.stats?.promptTokensCount ?? 0,
-            outgoingTokens: result.stats?.predictedTokensCount ?? 0
+            incomingTokens,
+            outgoingTokens
         };
     } catch (error) {
         console.error("Error asking question via LM Studio SDK:", error);

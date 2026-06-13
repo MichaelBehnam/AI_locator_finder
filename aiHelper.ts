@@ -119,6 +119,8 @@ export async function askQuestion(question: string): Promise<AIResponseDTO> {
  * @returns A Playwright Locator for the element.
  */
 export async function getLocatorFromAi(page: Page, description: string): Promise<Locator> {
+    console.log(`Generating locator for: "${description}"`);
+    
     const html = await page.content();
     
     let xpathSkills = "";

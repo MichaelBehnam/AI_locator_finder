@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "playwright test tests/locatorFromAi.spec.ts",
+    "show-report": "npx playwright show-report",
     "show-trace": "npx playwright show-trace"
   },
   "keywords": [],

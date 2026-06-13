@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { askQuestion } from '../aiHelper';
+import { AIResponseDTO } from '../aiResponse.dto';
 
 test.describe('AI Helper', () => {
   // NOTE: This test requires LM Studio to be running on localhost:1234.
@@ -7,10 +8,10 @@ test.describe('AI Helper', () => {
   // that is currently loaded in your LM Studio instance.
   test('should ask a question and return a text response', async () => {
     
-    const question = 'Please reply with exactly the words: "Hello, World!"';
+    const question: string = 'Please reply with exactly the words: "Hello, World!"';
 
     try {
-      const result = await askQuestion(question);
+      const result: AIResponseDTO = await askQuestion(question);
       
       console.log('AI Response:', result);
       
@@ -22,7 +23,7 @@ test.describe('AI Helper', () => {
       expect(typeof result.incomingTokens).toBe('number');
       expect(typeof result.outgoingTokens).toBe('number');
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         'Failed to connect to LM Studio. Ensure it is running on port 1234 and the model is loaded.',
         error

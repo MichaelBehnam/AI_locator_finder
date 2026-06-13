@@ -1,8 +1,8 @@
-import { Page, Locator } from "@playwright/test";
-import { LMStudioClient } from "@lmstudio/sdk";
+import {Page, Locator} from "@playwright/test";
+import {LMStudioClient} from "@lmstudio/sdk";
 import * as fs from "fs";
 import * as path from "path";
-import { AIResponseDTO } from "./aiResponse.dto";
+import {AIResponseDTO} from "./aiResponse.dto";
 
 function loadAndInitEnv(): void {
     const envPath: string = path.join(__dirname, ".env");
@@ -101,7 +101,7 @@ export async function askQuestion(question: string): Promise<AIResponseDTO> {
 
         // Return the DTO
         return {
-            response: result.content,
+            response: result.nonReasoningContent,
             incomingTokens,
             outgoingTokens
         };
@@ -120,13 +120,12 @@ export async function askQuestion(question: string): Promise<AIResponseDTO> {
  */
 export async function getLocatorFromAi(page: Page, description: string): Promise<Locator> {
     console.log(`Generating locator for: "${description}"`);
-    
+
     const html: string = await page.content();
-    
+
     let xpathSkills: string = "";
     try {
-        const xpathSkillsPath: string = path.join(__dirname, "skills", "get-xpath.md");
-        xpathSkills = fs.readFileSync(xpathSkillsPath, "utf8");
+        xpathSkills = fs.readFileSync(path.join(__dirname, "skills", "get-xpath.md"), "utf8");
     } catch (error: unknown) {
         console.warn("Could not read skills/get-xpath.md guidelines, proceeding without it:", error);
     }
@@ -149,42 +148,42 @@ ${xpathSkills}`;
 
     const aiResponse: AIResponseDTO = await askQuestion(prompt);
     // console.log(`RAW AI RESPONSE for "${description}":`, JSON.stringify(aiResponse.response)); // use for debugging LLM only
-    
+
     // Clean response
     let selector: string = aiResponse.response.trim();
-    
-    // Remove thought / channel blocks by scanning for known closing markers
-    const markers: string[] = ['<channel|>', '</thought>', '</details>', '<|channel|>', '<|channel>', '<channel>'];
-    for (const marker of markers) {
-        const lastIdx: number = selector.lastIndexOf(marker);
-        if (lastIdx !== -1) {
-            selector = selector.slice(lastIdx + marker.length).trim();
-            break;
-        }
-    }
-    
-    // Remove <thought>...</thought> block entirely if present
-    selector = selector.replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
-    // Remove <details>...</details> block entirely if present
-    selector = selector.replace(/<details>[\s\S]*?<\/details>/gi, '').trim();
-    
+
+    // // Remove thought / channel blocks by scanning for known closing markers
+    // const markers: string[] = ['<channel|>', '</thought>', '</details>', '<|channel|>', '<|channel>', '<channel>'];
+    // for (const marker of markers) {
+    //     const lastIdx: number = selector.lastIndexOf(marker);
+    //     if (lastIdx !== -1) {
+    //         selector = selector.slice(lastIdx + marker.length).trim();
+    //         break;
+    //     }
+    // }
+
+    // // Remove <thought>...</thought> block entirely if present
+    // selector = selector.replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
+    // // Remove <details>...</details> block entirely if present
+    // selector = selector.replace(/<details>[\s\S]*?<\/details>/gi, '').trim();
+
     // Strip codeblock indicators if present (e.g. ```xpath, ```css, ```)
     selector = selector.replace(/```(xpath|css|javascript|typescript|html)?/gi, '').replace(/```/g, '').trim();
-    
+
     // Split by lines and take the first non-empty line
     const lines: string[] = selector.split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
     if (lines.length > 0) {
         selector = lines[0];
     }
-    
+
     // Strip tags/tokens like <channel|> or <control_token>
     selector = selector.replace(/<[^>]+>/g, '').trim();
-    
+
     // Strip quotes if the AI wrapped it in quotes
     if ((selector.startsWith('"') && selector.endsWith('"')) || (selector.startsWith("'") && selector.endsWith("'"))) {
         selector = selector.slice(1, -1).trim();
     }
-    
+
     console.log(`AI identified selector for "${description}": "${selector}"`);
     return page.locator(selector);
 }

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { askQuestion } from '../aiHelper';
+import { askQuestion, getLocatorFromAi } from '../aiHelper';
 import { AIResponseDTO } from '../aiResponse.dto';
 
 test.describe('AI Helper', () => {
@@ -29,6 +29,24 @@ test.describe('AI Helper', () => {
         error
       );
       // Re-throw to ensure the test fails if it cannot connect
+      throw error;
+    }
+  });
+
+  test('should find Google Translate source textarea using AI with withImage true', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("https://translate.google.com/");
+    await page.waitForLoadState('domcontentloaded');
+
+    try {
+      const textarea = await getLocatorFromAi(page, "source translation text area", true);
+      await textarea.fill("Hello, World!");
+      await expect(textarea).toHaveValue("Hello, World!");
+    } catch (error: unknown) {
+      console.error(
+        'Failed to use getLocatorFromAi. Ensure LM Studio is running on port 1234 and a vision model is loaded.',
+        error
+      );
       throw error;
     }
   });

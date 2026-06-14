@@ -1,7 +1,9 @@
 import {Page, Locator} from "@playwright/test";
-import {LMStudioClient} from "@lmstudio/sdk";
+import {FileHandle, LMStudioClient} from "@lmstudio/sdk";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
+import * as crypto from "crypto";
 import {AIResponseDTO} from "./aiResponse.dto";
 
 function loadAndInitEnv(): void {
@@ -71,29 +73,33 @@ function loadAndInitEnv(): void {
 // Call env initialization immediately
 loadAndInitEnv();
 
+export function getLmcClient(): LMStudioClient {
+    const ip: string = process.env.AI_IP || '127.0.0.1';
+    const port: string = process.env.AI_PORT || '1234';
+    return new LMStudioClient({ baseUrl: `ws://${ip}:${port}` });
+}
+
 /**
  * Asks a question to the local AI using the LM Studio SDK.
  * Assumes the LM Studio server is running on localhost port 1234.
  *
  * @param question The text question to ask the AI.
+ * @param image Image file as FileHandle to add to question.
  * @returns The parsed text response from the AI.
  */
-export async function askQuestion(question: string): Promise<AIResponseDTO> {
+export async function askQuestion(question: string, image ?: FileHandle): Promise<AIResponseDTO> {
     const modelName: string = process.env.MODEL_NAME || 'google/gemma-4-e4b';
-    const ip: string = process.env.AI_IP || '127.0.0.1';
-    const port: string = process.env.AI_PORT || '1234';
-
-    // Initialize the LM Studio client to point to the host/port from env
-    const client: LMStudioClient = new LMStudioClient({
-        baseUrl: `ws://${ip}:${port}`
-    });
+    const client: LMStudioClient = getLmcClient();
 
     try {
         // Load or connect to the specified model
         const model = await client.llm.model(modelName);
 
+
         // Send the prompt and wait for the response
-        const result = await model.respond(question);
+        const result = await model.respond([
+            {role: 'user', content: question, images: image ? [image] : undefined}
+        ]);
 
         const incomingTokens: number = result.stats?.promptTokensCount ?? 0;
         const outgoingTokens: number = result.stats?.predictedTokensCount ?? 0;
@@ -116,12 +122,28 @@ export async function askQuestion(question: string): Promise<AIResponseDTO> {
  *
  * @param page The Playwright Page object.
  * @param description The description of the target element.
+ * @param withImage Include page image.
  * @returns A Playwright Locator for the element.
  */
-export async function getLocatorFromAi(page: Page, description: string): Promise<Locator> {
+export async function getLocatorFromAi(page: Page, description: string , withImage:boolean = false): Promise<Locator> {
     console.log(`Generating locator for: "${description}"`);
 
     const html: string = await page.content();
+    let imageFileHandle: FileHandle | undefined  = undefined;
+    let tempFilePath: string | undefined = undefined;
+    if (withImage) {
+        const imageBuffer = await page.screenshot({fullPage:true,quality:30 ,type: "jpeg"});
+        const client: LMStudioClient = getLmcClient();
+
+        const tempDir = path.join(__dirname, "temp");
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+        tempFilePath = path.join(tempDir, `${crypto.randomUUID()}.jpeg`);
+        console.debug(`temp File Path for screenshot: ${tempFilePath}`)
+        fs.writeFileSync(tempFilePath, imageBuffer);
+        imageFileHandle = await client.files.prepareImage(tempFilePath);
+    }
 
     let xpathSkills: string = "";
     try {
@@ -146,7 +168,14 @@ Do not include any other text, markdown formatting (like code blocks with \`\`\`
 Additional reference guidelines:
 ${xpathSkills}`;
 
-    const aiResponse: AIResponseDTO = await askQuestion(prompt);
+    let aiResponse: AIResponseDTO;
+    try {
+        aiResponse = await askQuestion(prompt, imageFileHandle);
+    } finally {
+        if (tempFilePath && fs.existsSync(tempFilePath)) {
+            try { fs.unlinkSync(tempFilePath); } catch (e) { console.error("Failed to delete temp image:", e); }
+        }
+    }
     // console.log(`RAW AI RESPONSE for "${description}":`, JSON.stringify(aiResponse.response)); // use for debugging LLM only
 
     // Clean response

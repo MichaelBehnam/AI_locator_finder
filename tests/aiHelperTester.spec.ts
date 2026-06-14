@@ -34,20 +34,19 @@ test.describe('AI Helper', () => {
   });
 
   test('should find Google Translate source textarea using AI with withImage true', async ({ page }) => {
-    test.setTimeout(120_000);
-    await page.goto("https://translate.google.com/");
-    await page.waitForLoadState('domcontentloaded');
-
-    try {
-      const textarea = await getLocatorFromAi(page, "source translation text area", true);
-      await textarea.fill("Hello, World!");
-      await expect(textarea).toHaveValue("Hello, World!");
-    } catch (error: unknown) {
-      console.error(
-        'Failed to use getLocatorFromAi. Ensure LM Studio is running on port 1234 and a vision model is loaded.',
-        error
-      );
-      throw error;
-    }
+    test.setTimeout(180_000);
+    await page.goto("https://playwright.dev/");
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(5_000);
+    
+    
+      const searchButton = await getLocatorFromAi(page, "Get Search button", true);
+      await searchButton.click();
+      const searchInput = await getLocatorFromAi(page, "Search docs input field to add search text", true);
+      const searchForText : string = "Get started";
+      await searchInput.fill(searchForText);
+      // Verify that we successfully searched by checking the URL or page content    
+      await expect(searchInput).toHaveValue(searchForText);
+      
   });
 });

@@ -33,7 +33,7 @@ test.describe('AI Helper', () => {
     }
   });
 
-  test('should find Google Translate source textarea using AI with withImage true', async ({ page }) => {
+  test('playwright Search docs using AI with withImage true', async ({ page }) => {
     test.setTimeout(180_000);
     await page.goto("https://playwright.dev/");
     await page.waitForLoadState('load');

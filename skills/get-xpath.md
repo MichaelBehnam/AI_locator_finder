@@ -29,7 +29,8 @@
    If the target element itself lacks unique attributes, find a unique parent, sibling, or container element nearby and traverse from it.
    * *Child to Parent:* `//input[@id='username']/parent::div`
    * *Ancestor to Descendant:* `//form[@id='search-form']//button` (Finds the button inside that specific form)
-   * *Sibling Traversal:* `//label[text()='Email']/following-sibling::input` (Finds the input field next to the 'Email' label)
+    * *Sibling Traversal:* `//label[text()='Email']/following-sibling::input` (Finds the input field next to the 'Email' label)
+    * **Advanced Tip (The Triad):** For maximum reliability, combine path relations (Axes), unique attributes (`id`, `data-testid`), and normalized text content using `and` operators. Example: Find a button that is a sibling of an element with ID X, AND has type submit, AND contains specific text: `//div[@id='unique-container']//label[@id='target-field']/following-sibling::button[text()='Submit' and @type='submit']`
 
 6. **Validate Uniqueness**
    Always verify in the browser DevTools console (using `$x("your_xpath")`) that the query returns an array length of exactly `1`.

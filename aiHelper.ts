@@ -2,7 +2,6 @@ import {Page, Locator} from "@playwright/test";
 import {FileHandle, LMStudioClient} from "@lmstudio/sdk";
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
 import * as crypto from "crypto";
 import {AIResponseDTO} from "./aiResponse.dto";
 
@@ -95,7 +94,6 @@ export async function askQuestion(question: string, image ?: FileHandle): Promis
         // Load or connect to the specified model
         const model = await client.llm.model(modelName);
 
-
         // Send the prompt and wait for the response
         const result = await model.respond([
             {role: 'user', content: question, images: image ? [image] : undefined}
@@ -156,13 +154,17 @@ export async function getLocatorFromAi(page: Page, description: string , withIma
 Given the following HTML of the page:
 ${html}
 
-Find the locator/selector for the element described as: "${description}"
+***FIND THE LOCATOR/SELECTOR FOR THE ELEMENT DESCRIBED AS: "${description}"***
 
 INSTRUCTIONS:
 1. If the target element has a unique 'id' attribute, you must use it (e.g. "#id-value" or "//*[@id='id-value']").
 2. If the target element has a unique 'data-test' or 'data-testid' or 'name' attribute, you must use it (e.g. "[data-test='value']" or "//*[@data-test='value']").
-3. Make sure the tag name (e.g. "input", "button", "a", "div") in your selector matches the tag name of the actual target element in the HTML. Do not confuse a container (like a <div>) with the interactive element itself (like an <input>).
-4. Return ONLY the raw CSS selector or XPath selector that can be passed directly to Playwright's page.locator() (e.g. "#login-button", "input[type='submit']", or "//button[text()='Login']"). 
+3. Pay attention to all kinds of elements based on the implied action:
+   - If the description implies a "click" action, the target is usually a <button>, <a>, or similar interactive element.
+   - If the description implies "entering text","input field", "inputting", or "searching", the target element MUST be an editable element such as an <input>, <textarea>, or a [contenteditable] element (which can be a <div> or <p>). You MUST NOT return a <button> or a non-editable container.
+4. Make sure the tag name (e.g. "input", "button", "a", "div") in your selector matches the tag name of the actual target element in the HTML. Do not confuse a container (like a <div>) with the interactive element itself unless the container is the intended interactive element.
+5. Return ONLY the raw CSS selector or XPath selector that can be passed directly to Playwright's page.locator() (e.g. "#login-button", "input[type='submit']", or "//button[text()='Login']").
+6. Keep it as short and precise as possible. 
 Do not include any other text, markdown formatting (like code blocks with \`\`\`), explanation, or other code. Return strictly the selector string itself.
 
 Additional reference guidelines:

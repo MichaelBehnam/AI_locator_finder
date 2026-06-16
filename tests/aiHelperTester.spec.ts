@@ -40,8 +40,8 @@ test.describe('AI Helper', () => {
         await page.waitForTimeout(5_000);
 
         const searchButton = await getLocatorFromAi(page, "Get Search button", true);
-        await searchButton.click();
-      await page.waitForTimeout(5_000);
+        await searchButton.click({timeout: 5_000});
+        await page.waitForTimeout(5_000);
         const searchInput = await getLocatorFromAi(page, "Search docs input field to add search text", true);
         const searchForText: string = "Get started";
         await searchInput.fill(searchForText, {timeout: 5_000});

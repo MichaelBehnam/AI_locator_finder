@@ -163,7 +163,7 @@ INSTRUCTIONS:
    - If the description implies a "click" action, the target is usually a <button>, <a>, or similar interactive element.
    - If the description implies "entering text","input field", "inputting", or "searching", the target element MUST be an editable element such as an <input>, <textarea>, or a [contenteditable] element (which can be a <div> or <p>). You MUST NOT return a <button> or a non-editable container.
 4. Make sure the tag name (e.g. "input", "button", "a", "div") in your selector matches the tag name of the actual target element in the HTML. Do not confuse a container (like a <div>) with the interactive element itself unless the container is the intended interactive element.
-5. When possible, prefer using an XPath selector and return ONLY the raw CSS selector or XPath selector that can be passed directly to Playwright's page.locator() (e.g. "#login-button", "input[type='submit']", or "//button[text()='Login']").
+5. ***When possible, prefer using an XPath selector*** and return ONLY the raw XPath selector or CSS selector ONLY that can be passed directly to Playwright's page.locator() (e.g. "#login-button", "input[type='submit']", or "//button[text()='Login']").
 6. Keep it as short and precise as possible. 
 Do not include any other text, markdown formatting (like code blocks with \`\`\`), explanation, or other code. Return strictly the selector string itself.
 

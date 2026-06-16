@@ -75,7 +75,7 @@ loadAndInitEnv();
 export function getLmcClient(): LMStudioClient {
     const ip: string = process.env.AI_IP || '127.0.0.1';
     const port: string = process.env.AI_PORT || '1234';
-    return new LMStudioClient({ baseUrl: `ws://${ip}:${port}` });
+    return new LMStudioClient({baseUrl: `ws://${ip}:${port}`});
 }
 
 /**
@@ -123,19 +123,19 @@ export async function askQuestion(question: string, image ?: FileHandle): Promis
  * @param withImage Include page image.
  * @returns A Playwright Locator for the element.
  */
-export async function getLocatorFromAi(page: Page, description: string , withImage:boolean = false): Promise<Locator> {
+export async function getLocatorFromAi(page: Page, description: string, withImage: boolean = false): Promise<Locator> {
     console.log(`Generating locator for: "${description}"`);
 
     const html: string = await page.content();
-    let imageFileHandle: FileHandle | undefined  = undefined;
+    let imageFileHandle: FileHandle | undefined = undefined;
     let tempFilePath: string | undefined = undefined;
     if (withImage) {
-        const imageBuffer = await page.screenshot({fullPage:true,quality:30 ,type: "jpeg"});
+        const imageBuffer = await page.screenshot({fullPage: true, quality: 30, type: "jpeg"});
         const client: LMStudioClient = getLmcClient();
 
         const tempDir = path.join(__dirname, "temp");
         if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
+            fs.mkdirSync(tempDir, {recursive: true});
         }
         tempFilePath = path.join(tempDir, `${crypto.randomUUID()}.jpeg`);
         console.debug(`temp File Path for screenshot: ${tempFilePath}`)
@@ -147,7 +147,7 @@ export async function getLocatorFromAi(page: Page, description: string , withIma
     try {
         xpathSkills = fs.readFileSync(path.join(__dirname, "skills", "get-xpath.md"), "utf8");
     } catch (error: unknown) {
-        console.warn("Could not read skills/get-xpath.md guidelines, proceeding without it:", error);
+        throw ("Could not read skills/get-xpath.md guidelines, proceeding without it:" + error);
     }
 
     const prompt: string = `You are a helper that finds a Playwright locator/selector for a given element in the HTML.
@@ -163,7 +163,7 @@ INSTRUCTIONS:
    - If the description implies a "click" action, the target is usually a <button>, <a>, or similar interactive element.
    - If the description implies "entering text","input field", "inputting", or "searching", the target element MUST be an editable element such as an <input>, <textarea>, or a [contenteditable] element (which can be a <div> or <p>). You MUST NOT return a <button> or a non-editable container.
 4. Make sure the tag name (e.g. "input", "button", "a", "div") in your selector matches the tag name of the actual target element in the HTML. Do not confuse a container (like a <div>) with the interactive element itself unless the container is the intended interactive element.
-5. Return ONLY the raw CSS selector or XPath selector that can be passed directly to Playwright's page.locator() (e.g. "#login-button", "input[type='submit']", or "//button[text()='Login']").
+5. When possible, prefer using an XPath selector and return ONLY the raw CSS selector or XPath selector that can be passed directly to Playwright's page.locator() (e.g. "#login-button", "input[type='submit']", or "//button[text()='Login']").
 6. Keep it as short and precise as possible. 
 Do not include any other text, markdown formatting (like code blocks with \`\`\`), explanation, or other code. Return strictly the selector string itself.
 
@@ -171,13 +171,8 @@ Additional reference guidelines:
 ${xpathSkills}`;
 
     let aiResponse: AIResponseDTO;
-    try {
-        aiResponse = await askQuestion(prompt, imageFileHandle);
-    } finally {
-        if (tempFilePath && fs.existsSync(tempFilePath)) {
-            try { fs.unlinkSync(tempFilePath); } catch (e) { console.error("Failed to delete temp image:", e); }
-        }
-    }
+
+    aiResponse = await askQuestion(prompt, imageFileHandle);
     // console.log(`RAW AI RESPONSE for "${description}":`, JSON.stringify(aiResponse.response)); // use for debugging LLM only
 
     // Clean response

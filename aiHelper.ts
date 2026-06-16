@@ -138,7 +138,7 @@ export async function getLocatorFromAi(page: Page, description: string, withImag
             fs.mkdirSync(tempDir, {recursive: true});
         }
         tempFilePath = path.join(tempDir, `${crypto.randomUUID()}.jpeg`);
-        console.debug(`temp File Path for screenshot: ${tempFilePath}`)
+        console.debug(`temp File Path for screenshot for "${description}":\n ${tempFilePath}`)
         fs.writeFileSync(tempFilePath, imageBuffer);
         imageFileHandle = await client.files.prepareImage(tempFilePath);
     }

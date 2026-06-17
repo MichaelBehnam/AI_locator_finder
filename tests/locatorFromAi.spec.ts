@@ -2,7 +2,7 @@ import { test, expect } from "../fixtures";
 import { Locator } from "@playwright/test";
 
 test.describe("AI Locator Tests", () => {
-    test('ask ai to generate a locator', async ({ page, aiLocator }) => {
+    test('ask ai to generate a locator for login and add items to cart', async ({ page, aiLocator }) => {
         test.setTimeout(120_000);
         await page.goto("https://www.saucedemo.com/");
         await page.waitForLoadState('domcontentloaded');
@@ -22,7 +22,7 @@ test.describe("AI Locator Tests", () => {
         // Verify that we successfully logged in by checking the URL or page content
         await page.waitForURL("**/inventory.html");
         const inventoryContainer: Locator = await aiLocator("inventory container or list");
-        await expect(inventoryContainer).toBeVisible();
+        await expect(inventoryContainer.first()).toBeVisible();
 
         // Add 2 items to cart using AI locators
         const addBackpackBtn: Locator = await aiLocator("add to cart button for Sauce Labs Backpack");
@@ -38,7 +38,10 @@ test.describe("AI Locator Tests", () => {
         // Verify that we are on the cart page and see the items
         await page.waitForURL("**/cart.html");
         const cartList: Locator = await aiLocator("cart list container");
-        await expect(cartList).toBeVisible();
+        await expect(cartList.first()).toBeVisible();
+
+        const checkout: Locator = await aiLocator("checkout button");
+        await checkout.click();
     });
 
     test('negative login feedback with incorrect username and password', async ({ page, aiLocator }) => {

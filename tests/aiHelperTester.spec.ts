@@ -37,11 +37,11 @@ test.describe('AI Helper', () => {
         test.setTimeout(180_000);
         await page.goto("https://playwright.dev/");
         await page.waitForLoadState('load');
-        await page.waitForTimeout(5_000);
+        // await page.waitForTimeout(5_000);
 
         const searchButton = await aiHelper.getLocatorFromAi( "Get Search button", true);
         await searchButton.click({timeout: 5_000});
-        await page.waitForTimeout(5_000);
+        // await page.waitForTimeout(5_000);
         const searchInput = await aiHelper.getLocatorFromAi( "Search docs input field to add search text", true);
         const searchForText: string = "Get started";
         await searchInput.fill(searchForText, {timeout: 5_000});

@@ -1,10 +1,9 @@
 import {Page, Locator} from "@playwright/test";
-import {FileHandle, LMStudioClient} from "@lmstudio/sdk";
+import {FileHandle, LLM, LMStudioClient, PredictionResult} from "@lmstudio/sdk";
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import {AIResponseDTO} from "./aiResponse.dto";
-
 
 
 export class AIHelper {
@@ -14,18 +13,18 @@ export class AIHelper {
     readonly client: LMStudioClient;
     readonly page: Page;
 
-    constructor(page: Page, ip?: string, port?: string, modelName?: string) {
+    constructor(page: Page) {
         this.page = page;
-        this.ip = ip ?? process.env.AI_IP ?? "127.0.0.1";
-        this.port = port ?? process.env.AI_PORT ?? "1234";
-        this.modelName = modelName ?? process.env.MODEL_NAME ?? "google/gemma-4-e4b";
+        this.ip = process.env.AI_IP ?? "127.0.0.1";
+        this.port = process.env.AI_PORT ?? "1234";
+        this.modelName = process.env.MODEL_NAME ?? "google/gemma-4-e4b";
         this.client = new LMStudioClient({baseUrl: `ws://${this.ip}:${this.port}`});
     }
 
     async askQuestion(question: string, image?: FileHandle): Promise<AIResponseDTO> {
-        const model = await this.client.llm.model(this.modelName);
+        const model: LLM = await this.client.llm.model(this.modelName);
 
-        const result = await model.respond([
+        const result: PredictionResult = await model.respond([
             {role: "user", content: question, images: image ? [image] : undefined}
         ]);
 
@@ -48,7 +47,7 @@ export class AIHelper {
         let imageFileHandle: FileHandle | undefined = undefined;
 
         if (withImage) {
-            const imageBuffer = await this.page.screenshot({fullPage: true, quality: 30, type: "jpeg"});
+            const imageBuffer: Buffer = await this.page.screenshot({fullPage: true, quality: 30, type: "jpeg"});
 
             const tempDir = path.join(__dirname, "temp");
             if (!fs.existsSync(tempDir)) {

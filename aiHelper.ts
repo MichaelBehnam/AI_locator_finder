@@ -40,34 +40,60 @@ export class AIHelper {
     }
 
     async getLocatorFromAi(description: string, withImage: boolean = false): Promise<Locator> {
-
         console.log(`Generating locator for: "${description}"`);
         const maxAttempts: number = 5;
+
         for (let attempt: number = 1; attempt <= maxAttempts; attempt++) {
             const html: string = await this.page.content();
-            let imageFileHandle: FileHandle | undefined = undefined;
+            const imageFileHandle: FileHandle | undefined = withImage
+                ? await this.captureScreenshot(description)
+                : undefined;
 
-            if (withImage) {
-                const imageBuffer: Buffer = await this.page.screenshot({fullPage: true, quality: 30, type: "jpeg"});
+            const prompt: string = this.buildPrompt(html, description);
+            const aiResponse: AIResponseDTO = await this.askQuestion(prompt, imageFileHandle);
+            const selector: string = this.cleanSelector(aiResponse.response);
 
-                const tempDir = path.join(__dirname, "temp");
-                if (!fs.existsSync(tempDir)) {
-                    fs.mkdirSync(tempDir, {recursive: true});
-                }
-                const tempFilePath = path.join(tempDir, `${crypto.randomUUID()}.jpeg`);
-                console.debug(`temp File Path for screenshot for "${description}":\n ${tempFilePath}`);
-                fs.writeFileSync(tempFilePath, imageBuffer);
-                imageFileHandle = await this.client.files.prepareImage(tempFilePath);
+            console.log(`AI identified selector for "${description}" (attempt ${attempt}/${maxAttempts}): "${selector}"`);
+
+            if (!selector) {
+                console.warn(`Empty selector returned for "${description}", retrying...`);
+                continue;
             }
 
-            let xpathSkills: string = "";
-            try {
-                xpathSkills = fs.readFileSync(path.join(__dirname, "skills", "get-xpath.md"), "utf8");
-            } catch (error: unknown) {
-                throw ("Could not read skills/get-xpath.md guidelines, proceeding without it:" + error);
+            const locator: Locator | undefined = await this.resolveLocator(selector, description);
+            if (locator) {
+                return locator;
             }
+        }
 
-            const prompt: string = `You are a helper that finds a Playwright locator/selector for a given element in the HTML.
+        throw new Error(`Failed to find a relevant locator for "${description}" after ${maxAttempts} attempts`);
+    }
+
+    private async captureScreenshot(description: string): Promise<FileHandle> {
+        const imageBuffer: Buffer = await this.page.screenshot({fullPage: true, quality: 30, type: "jpeg"});
+
+        const tempDir = path.join(__dirname, "temp");
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, {recursive: true});
+        }
+        const tempFilePath = path.join(tempDir, `${crypto.randomUUID()}.jpeg`);
+        console.debug(`temp File Path for screenshot for "${description}":\n ${tempFilePath}`);
+        fs.writeFileSync(tempFilePath, imageBuffer);
+        return this.client.files.prepareImage(tempFilePath);
+    }
+
+    private loadXpathSkills(): string {
+        try {
+            return fs.readFileSync(path.join(__dirname, "skills", "get-xpath.md"), "utf8");
+        } catch (error: unknown) {
+            throw ("Could not read skills/get-xpath.md guidelines, proceeding without it:" + error);
+        }
+    }
+
+    private buildPrompt(html: string, description: string): string {
+        const xpathSkills: string = this.loadXpathSkills();
+
+        return `You are a helper that finds a Playwright locator/selector for a given element in the HTML.
 Given the following HTML of the page:
 ${html}
 
@@ -86,46 +112,40 @@ Do not include any other text, markdown formatting (like code blocks with \`\`\`
 
 Additional reference guidelines:
 ${xpathSkills}`;
+    }
 
+    private cleanSelector(rawResponse: string): string {
+        let selector: string = rawResponse.trim();
 
-            const aiResponse: AIResponseDTO = await this.askQuestion(prompt, imageFileHandle);
+        selector = selector.replace(/```(xpath|css|javascript|typescript|html)?/gi, "").replace(/```/g, "").trim();
 
-            let selector: string = aiResponse.response.trim();
-
-            selector = selector.replace(/```(xpath|css|javascript|typescript|html)?/gi, "").replace(/```/g, "").trim();
-
-            const lines: string[] = selector.split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-            if (lines.length > 0) {
-                selector = lines[0];
-            }
-
-            selector = selector.replace(/<[^>]+>/g, "").trim();
-
-            if ((selector.startsWith('"') && selector.endsWith('"')) || (selector.startsWith("'") && selector.endsWith("'"))) {
-                selector = selector.slice(1, -1).trim();
-            }
-
-            console.log(`AI identified selector for "${description}" (attempt ${attempt}/${maxAttempts}): "${selector}"`);
-
-            if (!selector) {
-                console.warn(`Empty selector returned for "${description}", retrying...`);
-                continue;
-            }
-
-            try {
-                const locator: Locator = this.page.locator(selector);
-                const count: number = await locator.count();
-                if (count > 0) {
-                    return locator;
-                }
-                await this.page.waitForTimeout(5000);
-                console.warn(`Selector "${selector}" matched no elements for "${description}", retrying...`);
-            } catch (error: unknown) {
-                console.warn(`Invalid selector "${selector}" for "${description}": retrying...`);
-            }
+        const lines: string[] = selector.split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+        if (lines.length > 0) {
+            selector = lines[0];
         }
 
-        throw new Error(`Failed to find a relevant locator for "${description}" after ${maxAttempts} attempts`);
+        selector = selector.replace(/<[^>]+>/g, "").trim();
+
+        if ((selector.startsWith('"') && selector.endsWith('"')) || (selector.startsWith("'") && selector.endsWith("'"))) {
+            selector = selector.slice(1, -1).trim();
+        }
+
+        return selector;
+    }
+
+    private async resolveLocator(selector: string, description: string): Promise<Locator | undefined> {
+        try {
+            const locator: Locator = this.page.locator(selector);
+            const count: number = await locator.count();
+            if (count > 0) {
+                return locator;
+            }
+            await this.page.waitForTimeout(5000);
+            console.warn(`Selector "${selector}" matched no elements for "${description}", retrying...`);
+        } catch (error: unknown) {
+            console.warn(`Invalid selector "${selector}" for "${description}": retrying...`);
+        }
+        return undefined;
     }
 }
 

@@ -2,70 +2,57 @@ import { test, expect } from "../fixtures";
 import { Locator } from "@playwright/test";
 
 test.describe("AI Locator Tests", () => {
-    test('ask ai to generate a locator for login and add items to cart', async ({ page, aiLocator }) => {
+    test('ask ai to generate a locator for login and add items to cart', async ({ page, aiHelper }) => {
         test.setTimeout(120_000);
         await page.goto("https://www.saucedemo.com/");
         await page.waitForLoadState('domcontentloaded');
-        
-        // Get username input field using AI helper and fill it
-        const usernameInput: Locator = await aiLocator("username input field");
+
+        const usernameInput: Locator = await aiHelper.getLocatorFromAi("username input field");
         await usernameInput.fill("standard_user");
-        
-        // Get password input field using AI helper and fill it
-        const passwordInput: Locator = await aiLocator("password input field");
+
+        const passwordInput: Locator = await aiHelper.getLocatorFromAi("password input field");
         await passwordInput.fill("secret_sauce");
-        
-        // Get login button using AI helper and click it
-        const loginButton: Locator = await aiLocator("login button");
+
+        const loginButton: Locator = await aiHelper.getLocatorFromAi("login button");
         await loginButton.click();
-        
-        // Verify that we successfully logged in by checking the URL or page content
+
         await page.waitForURL("**/inventory.html");
-        const inventoryContainer: Locator = await aiLocator("inventory container or list");
+        const inventoryContainer: Locator = await aiHelper.getLocatorFromAi("inventory container or list");
         await expect(inventoryContainer.first()).toBeVisible();
 
-        // Add 2 items to cart using AI locators
-        const addBackpackBtn: Locator = await aiLocator("add to cart button for Sauce Labs Backpack");
+        const addBackpackBtn: Locator = await aiHelper.getLocatorFromAi("add to cart button for Sauce Labs Backpack");
         await addBackpackBtn.click();
 
-        const addBikeLightBtn: Locator = await aiLocator("add to cart button for Sauce Labs Bike Light");
+        const addBikeLightBtn: Locator = await aiHelper.getLocatorFromAi("add to cart button for Sauce Labs Bike Light");
         await addBikeLightBtn.click();
 
-        // Go to cart
-        const cartLink: Locator = await aiLocator("shopping cart link");
+        const cartLink: Locator = await aiHelper.getLocatorFromAi("shopping cart link");
         await cartLink.click();
 
-        // Verify that we are on the cart page and see the items
         await page.waitForURL("**/cart.html");
-        const cartList: Locator = await aiLocator("cart list container");
+        const cartList: Locator = await aiHelper.getLocatorFromAi("cart list container");
         await expect(cartList.first()).toBeVisible();
 
-        const checkout: Locator = await aiLocator("checkout button");
+        const checkout: Locator = await aiHelper.getLocatorFromAi("checkout button");
         await checkout.click();
     });
 
-    test('negative login feedback with incorrect username and password', async ({ page, aiLocator }) => {
+    test('negative login feedback with incorrect username and password', async ({ page, aiHelper }) => {
         test.setTimeout(90_000);
         await page.goto("https://www.saucedemo.com/");
         await page.waitForLoadState('domcontentloaded');
-        
-        // Get username input field using AI helper and fill it with incorrect username
-        const usernameInput: Locator = await aiLocator("username input field");
+
+        const usernameInput: Locator = await aiHelper.getLocatorFromAi("username input field");
         await usernameInput.fill("invalid_user");
-        
-        // Get password input field using AI helper and fill it with incorrect password
-        const passwordInput: Locator = await aiLocator("password input field");
+
+        const passwordInput: Locator = await aiHelper.getLocatorFromAi("password input field");
         await passwordInput.fill("invalid_password");
-        
-        // Get login button using AI helper and click it
-        const loginButton: Locator = await aiLocator("login button");
+
+        const loginButton: Locator = await aiHelper.getLocatorFromAi("login button");
         await loginButton.click();
-        
-        // Verify that incorrect login message is shown
-        const errorMessage: Locator = await aiLocator("error message container or text");
+
+        const errorMessage: Locator = await aiHelper.getLocatorFromAi("error message container or text");
         await expect(errorMessage).toBeVisible();
         await expect(errorMessage).toContainText("Username and password do not match");
     });
 });
-
-

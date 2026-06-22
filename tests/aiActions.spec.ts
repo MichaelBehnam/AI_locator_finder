@@ -15,7 +15,7 @@ test.describe("AI Actions", () => {
         await page.waitForURL("**/inventory.html");
 
         // get text
-        const title: string = await aiActions.getText("page title header in the top bar");
+        const title: string = await aiActions.getText("the page section title text shown above the products grid");
         expect(title).toContain("Products");
 
         // click to add an item, then open the cart
@@ -34,11 +34,14 @@ test.describe("AI Actions", () => {
         await page.goto("https://playwright.dev/");
         await page.waitForLoadState("load");
 
-        await aiActions.click("Search button", true);
+        await aiActions.click("the search button that opens the search dialog", true);
+
+        // the search dialog (Algolia DocSearch) lazy-loads its input, so wait for it to render
+        await aiActions.waitFor("the text input inside the open search dialog", "visible", true);
 
         const searchText: string = "Get started";
-        await aiActions.fill("Search docs input field to add search text", searchText, true);
+        await aiActions.fill("the text input inside the open search dialog", searchText, true);
 
-        expect(await aiActions.getInputValue("Search docs input field to add search text", true)).toBe(searchText);
+        expect(await aiActions.getInputValue("the text input inside the open search dialog", true)).toBe(searchText);
     });
 });

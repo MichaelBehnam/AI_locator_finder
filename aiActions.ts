@@ -110,6 +110,17 @@ export class AIActions {
         await locator.press(key, {timeout});
     }
 
+    /** Wait for the element matching the description to reach the given state (default "visible"). */
+    async waitFor(
+        description: string,
+        state: "attached" | "visible" | "hidden" = "visible",
+        withImage: boolean = false,
+        timeout?: number
+    ): Promise<void> {
+        const locator: Locator = await this.locate(description, withImage);
+        await locator.waitFor({state, timeout});
+    }
+
     /** Whether the element is visible on the page. */
     async isVisible(description: string, withImage: boolean = false, timeout?: number): Promise<boolean> {
         const locator: Locator = await this.locate(description, withImage);

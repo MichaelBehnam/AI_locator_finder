@@ -43,10 +43,13 @@ AI_IP=127.0.0.1
 
 # The port where your LM Studio local server is running
 AI_PORT=1234
+
+# The maximum number of attempts to find a locator before failing
+MAX_ATTEMPTS=5
 ```
 
 > [!NOTE]
-> When the project runs, the initialization code in `loadAndInitEnv()` automatically checks for the existence of the `.env` file. If the file is missing or has missing keys, it will automatically populate them with default values (`MODEL_NAME=google/gemma-4-e4b`, `AI_IP=127.0.0.1`, `AI_PORT=1234`).
+> Each variable falls back to a built-in default if it is missing, empty, or invalid: `MODEL_NAME=google/gemma-4-e4b`, `AI_IP=127.0.0.1`, `AI_PORT=1234`, and `MAX_ATTEMPTS=5`.
 
 ---
 

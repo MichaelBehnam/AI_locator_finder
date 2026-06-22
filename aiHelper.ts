@@ -1,156 +1,99 @@
 import {Page, Locator} from "@playwright/test";
-import {FileHandle, LMStudioClient} from "@lmstudio/sdk";
+import {FileHandle, LLM, LMStudioClient, PredictionResult} from "@lmstudio/sdk";
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import {AIResponseDTO} from "./aiResponse.dto";
 
-function loadAndInitEnv(): void {
-    const envPath: string = path.join(__dirname, ".env");
-    const defaults: Record<string, string> = {
-        MODEL_NAME: "google/gemma-4-e4b",
-        AI_IP: "127.0.0.1",
-        AI_PORT: "1234"
-    };
 
-    let existingEnvContent: string = "";
-    const parsed: Record<string, string> = {};
+export class AIHelper {
+    readonly ip: string;
+    readonly port: string;
+    readonly modelName: string;
+    readonly client: LMStudioClient;
+    readonly page: Page;
 
-    if (fs.existsSync(envPath)) {
-        existingEnvContent = fs.readFileSync(envPath, "utf8");
-        // Parse existing env variables
-        const lines: string[] = existingEnvContent.split(/\r?\n/);
-        for (const line of lines) {
-            const trimmed: string = line.trim();
-            if (!trimmed || trimmed.startsWith("#")) {
-                continue;
-            }
-            const equalsIndex: number = trimmed.indexOf("=");
-            if (equalsIndex !== -1) {
-                const key: string = trimmed.slice(0, equalsIndex).trim();
-                let value: string = trimmed.slice(equalsIndex + 1).trim();
-                // strip quotes if any
-                if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-                    value = value.slice(1, -1).trim();
-                }
-                parsed[key] = value;
-            }
-        }
-    } else {
-        console.warn("No .env file found");
+    constructor(page: Page) {
+        this.page = page;
+        this.ip = process.env.AI_IP ?? "127.0.0.1";
+        this.port = process.env.AI_PORT ?? "1234";
+        this.modelName = process.env.MODEL_NAME ?? "google/gemma-4-e4b";
+        this.client = new LMStudioClient({baseUrl: `ws://${this.ip}:${this.port}`});
     }
 
-    // Identify missing keys
-    const missingKeys: string[] = Object.keys(defaults).filter(key => !(key in parsed));
+    async askQuestion(question: string, image?: FileHandle): Promise<AIResponseDTO> {
+        const model: LLM = await this.client.llm.model(this.modelName);
 
-    if (missingKeys.length > 0) {
-        let newLines: string = "";
-        for (const key of missingKeys) {
-            const value: string = defaults[key];
-            parsed[key] = value;
-            newLines += `${key}=${value}\n`;
-        }
-
-        // Write or append
-        if (existingEnvContent) {
-            // Ensure there's a trailing newline before appending
-            const separator: string = existingEnvContent.endsWith("\n") ? "" : "\n";
-            fs.appendFileSync(envPath, separator + newLines, "utf8");
-        } else {
-            fs.writeFileSync(envPath, newLines, "utf8");
-        }
-    }
-
-    // Set process.env
-    for (const key in parsed) {
-        if (process.env[key] === undefined) {
-            process.env[key] = parsed[key];
-        }
-    }
-}
-
-// Call env initialization immediately
-loadAndInitEnv();
-
-export function getLmcClient(): LMStudioClient {
-    const ip: string = process.env.AI_IP || '127.0.0.1';
-    const port: string = process.env.AI_PORT || '1234';
-    return new LMStudioClient({baseUrl: `ws://${ip}:${port}`});
-}
-
-/**
- * Asks a question to the local AI using the LM Studio SDK.
- * Assumes the LM Studio server is running on localhost port 1234.
- *
- * @param question The text question to ask the AI.
- * @param image Image file as FileHandle to add to question.
- * @returns The parsed text response from the AI.
- */
-export async function askQuestion(question: string, image ?: FileHandle): Promise<AIResponseDTO> {
-    const modelName: string = process.env.MODEL_NAME || 'google/gemma-4-e4b';
-    const client: LMStudioClient = getLmcClient();
-
-    try {
-        // Load or connect to the specified model
-        const model = await client.llm.model(modelName);
-
-        // Send the prompt and wait for the response
-        const result = await model.respond([
-            {role: 'user', content: question, images: image ? [image] : undefined}
+        const result: PredictionResult = await model.respond([
+            {role: "user", content: question, images: image ? [image] : undefined}
         ]);
 
         const incomingTokens: number = result.stats?.promptTokensCount ?? 0;
         const outgoingTokens: number = result.stats?.predictedTokensCount ?? 0;
         console.log(`Tokens - Incoming: ${incomingTokens}, Outgoing: ${outgoingTokens}`);
 
-        // Return the DTO
         return {
             response: result.nonReasoningContent,
             incomingTokens,
             outgoingTokens
         };
-    } catch (error: unknown) {
-        console.error("Error asking question via LM Studio SDK:", error);
-        throw error;
     }
-}
 
-/**
- * Gets a Playwright Locator using local AI based on the page's HTML content and an element description.
- *
- * @param page The Playwright Page object.
- * @param description The description of the target element.
- * @param withImage Include page image.
- * @returns A Playwright Locator for the element.
- */
-export async function getLocatorFromAi(page: Page, description: string, withImage: boolean = false): Promise<Locator> {
-    console.log(`Generating locator for: "${description}"`);
+    async getLocatorFromAi(description: string, withImage: boolean = false): Promise<Locator> {
+        console.log(`Generating locator for: "${description}"`);
+        const maxAttempts: number = 5;
 
-    const html: string = await page.content();
-    let imageFileHandle: FileHandle | undefined = undefined;
-    let tempFilePath: string | undefined = undefined;
-    if (withImage) {
-        const imageBuffer = await page.screenshot({fullPage: true, quality: 30, type: "jpeg"});
-        const client: LMStudioClient = getLmcClient();
+        for (let attempt: number = 1; attempt <= maxAttempts; attempt++) {
+            const html: string = await this.page.content();
+            const imageFileHandle: FileHandle | undefined = withImage
+                ? await this.captureScreenshot(description)
+                : undefined;
+
+            const prompt: string = this.buildPrompt(html, description);
+            const aiResponse: AIResponseDTO = await this.askQuestion(prompt, imageFileHandle);
+            const selector: string = this.cleanSelector(aiResponse.response);
+
+            console.log(`AI identified selector for "${description}" (attempt ${attempt}/${maxAttempts}): "${selector}"`);
+
+            if (!selector) {
+                console.warn(`Empty selector returned for "${description}", retrying...`);
+                continue;
+            }
+
+            const locator: Locator | undefined = await this.resolveLocator(selector, description);
+            if (locator) {
+                return locator;
+            }
+        }
+
+        throw new Error(`Failed to find a relevant locator for "${description}" after ${maxAttempts} attempts`);
+    }
+
+    private async captureScreenshot(description: string): Promise<FileHandle> {
+        const imageBuffer: Buffer = await this.page.screenshot({fullPage: true, quality: 30, type: "jpeg"});
 
         const tempDir = path.join(__dirname, "temp");
         if (!fs.existsSync(tempDir)) {
             fs.mkdirSync(tempDir, {recursive: true});
         }
-        tempFilePath = path.join(tempDir, `${crypto.randomUUID()}.jpeg`);
-        console.debug(`temp File Path for screenshot for "${description}":\n ${tempFilePath}`)
+        const tempFilePath = path.join(tempDir, `${crypto.randomUUID()}.jpeg`);
+        console.debug(`temp File Path for screenshot for "${description}":\n ${tempFilePath}`);
         fs.writeFileSync(tempFilePath, imageBuffer);
-        imageFileHandle = await client.files.prepareImage(tempFilePath);
+        return this.client.files.prepareImage(tempFilePath);
     }
 
-    let xpathSkills: string = "";
-    try {
-        xpathSkills = fs.readFileSync(path.join(__dirname, "skills", "get-xpath.md"), "utf8");
-    } catch (error: unknown) {
-        throw ("Could not read skills/get-xpath.md guidelines, proceeding without it:" + error);
+    private loadXpathSkills(): string {
+        try {
+            return fs.readFileSync(path.join(__dirname, "skills", "get-xpath.md"), "utf8");
+        } catch (error: unknown) {
+            throw ("Could not read skills/get-xpath.md guidelines, proceeding without it:" + error);
+        }
     }
 
-    const prompt: string = `You are a helper that finds a Playwright locator/selector for a given element in the HTML.
+    private buildPrompt(html: string, description: string): string {
+        const xpathSkills: string = this.loadXpathSkills();
+
+        return `You are a helper that finds a Playwright locator/selector for a given element in the HTML.
 Given the following HTML of the page:
 ${html}
 
@@ -164,37 +107,46 @@ INSTRUCTIONS:
    - If the description implies "entering text","input field", "inputting", or "searching", the target element MUST be an editable element such as an <input>, <textarea>, or a [contenteditable] element (which can be a <div> or <p>). You MUST NOT return a <button> or a non-editable container.
 4. Make sure the tag name (e.g. "input", "button", "a", "div") in your selector matches the tag name of the actual target element in the HTML. Do not confuse a container (like a <div>) with the interactive element itself unless the container is the intended interactive element.
 5. ***When possible, prefer using an XPath selector*** and return ONLY the raw XPath selector or CSS selector ONLY that can be passed directly to Playwright's page.locator() (e.g. "#login-button", "input[type='submit']", or "//button[text()='Login']").
-6. Keep it as short and precise as possible. 
+6. Keep it as short and precise as possible.
 Do not include any other text, markdown formatting (like code blocks with \`\`\`), explanation, or other code. Return strictly the selector string itself.
 
 Additional reference guidelines:
 ${xpathSkills}`;
-
-    let aiResponse: AIResponseDTO;
-
-    aiResponse = await askQuestion(prompt, imageFileHandle);
-    // console.log(`RAW AI RESPONSE for "${description}":`, JSON.stringify(aiResponse.response)); // use for debugging LLM only
-
-    // Clean response
-    let selector: string = aiResponse.response.trim();
-
-    // Strip codeblock indicators if present (e.g. ```xpath, ```css, ```)
-    selector = selector.replace(/```(xpath|css|javascript|typescript|html)?/gi, '').replace(/```/g, '').trim();
-
-    // Split by lines and take the first non-empty line
-    const lines: string[] = selector.split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-    if (lines.length > 0) {
-        selector = lines[0];
     }
 
-    // Strip tags/tokens like <channel|> or <control_token>
-    selector = selector.replace(/<[^>]+>/g, '').trim();
+    private cleanSelector(rawResponse: string): string {
+        let selector: string = rawResponse.trim();
 
-    // Strip quotes if the AI wrapped it in quotes
-    if ((selector.startsWith('"') && selector.endsWith('"')) || (selector.startsWith("'") && selector.endsWith("'"))) {
-        selector = selector.slice(1, -1).trim();
+        selector = selector.replace(/```(xpath|css|javascript|typescript|html)?/gi, "").replace(/```/g, "").trim();
+
+        const lines: string[] = selector.split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+        if (lines.length > 0) {
+            selector = lines[0];
+        }
+
+        selector = selector.replace(/<[^>]+>/g, "").trim();
+
+        if ((selector.startsWith('"') && selector.endsWith('"')) || (selector.startsWith("'") && selector.endsWith("'"))) {
+            selector = selector.slice(1, -1).trim();
+        }
+
+        return selector;
     }
 
-    console.log(`AI identified selector for "${description}": "${selector}"`);
-    return page.locator(selector);
+    private async resolveLocator(selector: string, description: string): Promise<Locator | undefined> {
+        try {
+            const locator: Locator = this.page.locator(selector);
+            const count: number = await locator.count();
+            if (count > 0) {
+                return locator;
+            }
+            await this.page.waitForTimeout(5000);
+            console.warn(`Selector "${selector}" matched no elements for "${description}", retrying...`);
+        } catch (error: unknown) {
+            console.warn(`Invalid selector "${selector}" for "${description}": retrying...`);
+        }
+        return undefined;
+    }
 }
+
+

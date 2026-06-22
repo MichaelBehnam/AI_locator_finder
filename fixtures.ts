@@ -1,16 +1,13 @@
-import { test as base, expect, Locator } from "@playwright/test";
-import { getLocatorFromAi } from "./aiHelper";
+import { test as base, expect } from "@playwright/test";
+import { AIHelper } from "./aiHelper";
 
-// Define the fixture type
 export type MyFixtures = {
-    aiLocator: (description: string) => Promise<Locator>;
+    aiHelper: AIHelper;
 };
 
-// Extend base test to include our new fixture
 export const test = base.extend<MyFixtures>({
-    aiLocator: async ({ page }, use) => {
-        const boundGetLocator = (description: string) => getLocatorFromAi(page, description);
-        await use(boundGetLocator);
+    aiHelper: async ({ page }, use) => {
+        await use(new AIHelper(page));
     },
 });
 

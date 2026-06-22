@@ -1,17 +1,17 @@
-import {test, expect} from '@playwright/test';
-import {askQuestion, getLocatorFromAi} from '../aiHelper';
+import {expect} from '@playwright/test';
 import {AIResponseDTO} from '../aiResponse.dto';
+import {test} from "../fixtures";
 
 test.describe('AI Helper', () => {
     // NOTE: This test requires LM Studio to be running on localhost:1234.
     // You will need to replace 'your-loaded-model-id' with the actual model identifier
     // that is currently loaded in your LM Studio instance.
-    test('should ask a question and return a text response', async () => {
+    test('should ask a question and return a text response', async ({aiHelper}) => {
 
         const question: string = 'Please reply with exactly the words: "Hello, World!"';
 
         try {
-            const result: AIResponseDTO = await askQuestion(question);
+            const result: AIResponseDTO = await aiHelper.askQuestion(question);
 
             console.log('AI Response:', result);
 
@@ -33,16 +33,16 @@ test.describe('AI Helper', () => {
         }
     });
 
-    test('playwright Search docs using AI with withImage true', async ({page}) => {
+    test('playwright Search docs using AI with withImage true', async ({page ,aiHelper}) => {
         test.setTimeout(180_000);
         await page.goto("https://playwright.dev/");
         await page.waitForLoadState('load');
-        await page.waitForTimeout(5_000);
+        // await page.waitForTimeout(5_000);
 
-        const searchButton = await getLocatorFromAi(page, "Get Search button", true);
+        const searchButton = await aiHelper.getLocatorFromAi( "Get Search button", true);
         await searchButton.click({timeout: 5_000});
-        await page.waitForTimeout(5_000);
-        const searchInput = await getLocatorFromAi(page, "Search docs input field to add search text", true);
+        // await page.waitForTimeout(5_000);
+        const searchInput = await aiHelper.getLocatorFromAi( "Search docs input field to add search text", true);
         const searchForText: string = "Get started";
         await searchInput.fill(searchForText, {timeout: 5_000});
         // Verify that we successfully searched by checking the URL or page content

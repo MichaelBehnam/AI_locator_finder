@@ -13,6 +13,7 @@ A lightweight integration tool that leverages a local LLM running in **LM Studio
 | --- | --- | --- |
 | [`AIHelper`](./aiHelper.ts) | `aiHelper.ts` | Talks to the LM Studio model, builds the prompt, and resolves a natural-language description into a Playwright `Locator`. |
 | [`AIActions`](./aiActions.ts) | `aiActions.ts` | High-level wrapper around `AIHelper` that resolves a description **and** performs a Playwright action (click, fill, getText, …) in a single call. |
+| [`AISmartActions`](./aiSmartActions.ts) | `aiSmartActions.ts` | Top-level wrapper that **infers which action** a free-form instruction implies (click? fill? read?), then dispatches to the matching `AIActions` method. |
 
 ---
 
@@ -74,6 +75,31 @@ await aiActions.click("login button", false, 10_000); // custom 10s timeout
 | `press(description, key, withImage?, timeout?)` | Focus the element and press a key, e.g. `"Enter"`. |
 | `isVisible(description, withImage?, timeout?)` | Whether the element is visible. |
 | `isChecked(description, withImage?, timeout?)` | Whether a checkbox/radio is checked. |
+
+---
+
+## Inferred actions: `AISmartActions`
+
+[`AISmartActions`](./aiSmartActions.ts) sits one level above [`AIActions`](./aiActions.ts). Instead of *you* naming the action, the AI **infers** which action a free-form instruction implies, extracts the target element and any value it needs, then calls the matching `AIActions` method for you.
+
+```typescript
+await smart.perform("enter standard_user into the username field"); // -> aiActions.fill(...)
+await smart.perform("click the login button");                       // -> aiActions.click(...)
+const title = await smart.perform("read the page title");            // -> aiActions.getText(...)
+const ok    = await smart.perform("is the cart link visible");       // -> aiActions.isVisible(...)
+```
+
+Under the hood, `perform` first asks the model to classify the instruction into a structured [`AIActionIntentDTO`](./aiActionIntent.dto.ts) — `{ action, target, value? }` — then routes that intent to the right `AIActions` call. The result is whatever the underlying action returns (`void`, `string`, `boolean`, …).
+
+### Methods
+
+| Method | Description |
+| --- | --- |
+| `perform(instruction, withImage?, timeout?)` | Infer the action from the instruction and execute it. Returns the underlying action's result. |
+| `performAll(instructions, withImage?, timeout?)` | Run a list of instructions in order, returning each step's result. |
+| `resolveIntent(instruction)` | Classify the instruction into an `AIActionIntentDTO` **without** executing it (handy for assertions/debugging). |
+
+The inferred `action` is one of the same verbs `AIActions` exposes: `click`, `doubleClick`, `fill`, `type`, `clear`, `getText`, `getAttribute`, `getInputValue`, `check`, `uncheck`, `selectOption`, `hover`, `press`, `isVisible`, `isChecked`, `waitFor`. For `fill`/`type` the model also returns the text, for `selectOption` the option, for `press` the key, and for `getAttribute` the attribute name.
 
 ---
 

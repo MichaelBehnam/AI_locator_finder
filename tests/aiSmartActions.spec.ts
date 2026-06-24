@@ -8,10 +8,17 @@ test.describe("AI Smart Actions", () => {
         await page.waitForLoadState("domcontentloaded");
 
         // The model should classify each instruction into the right action + target (+ value).
+        // "enter ... into" implies a one-shot fill, not character-by-character typing.
         const fillIntent: AIActionIntentDTO =
-            await aiSmartActions.resolveIntent("type standard_user into the username field");
+            await aiSmartActions.resolveIntent("enter standard_user into the username field");
         expect(fillIntent.action).toBe("fill");
         expect(fillIntent.value).toBe("standard_user");
+
+        // An explicit "type ... one character at a time" instruction implies type.
+        const typeIntent: AIActionIntentDTO =
+            await aiSmartActions.resolveIntent("type secret_sauce one character at a time into the password field");
+        expect(typeIntent.action).toBe("type");
+        expect(typeIntent.value).toBe("secret_sauce");
 
         const clickIntent: AIActionIntentDTO =
             await aiSmartActions.resolveIntent("click the login button");

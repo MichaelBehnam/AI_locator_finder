@@ -26,8 +26,13 @@ export default defineConfig({
   reporter: [['html', { open: 'never' }]],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    /* Base URL to use in actions like `await page.goto('')`. */
-    // baseURL: 'http://localhost:3000',
+
+    /* Maximum time each action (click, fill, etc.) can take. Kept generous to
+       account for AI-located actions resolving selectors at runtime. */
+    actionTimeout: 5_000,
+
+    /* Maximum time page.goto / navigation actions can take. */
+    navigationTimeout: 30_000,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on',

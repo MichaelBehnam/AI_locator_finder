@@ -10,6 +10,7 @@ export class AIHelper {
     readonly ip: string;
     readonly port: string;
     readonly modelName: string;
+    readonly maxAttempts: number;
     readonly client: LMStudioClient;
     readonly page: Page;
 
@@ -18,6 +19,7 @@ export class AIHelper {
         this.ip = process.env.AI_IP ?? "127.0.0.1";
         this.port = process.env.AI_PORT ?? "1234";
         this.modelName = process.env.MODEL_NAME ?? "google/gemma-4-e4b";
+        this.maxAttempts = Number(process.env.MAX_ATTEMPTS) || 5;
         this.client = new LMStudioClient({baseUrl: `ws://${this.ip}:${this.port}`});
     }
 
@@ -41,9 +43,9 @@ export class AIHelper {
 
     async getLocatorFromAi(description: string, withImage: boolean = false): Promise<Locator> {
         console.log(`Generating locator for: "${description}"`);
-        const maxAttempts: number = 5;
 
-        for (let attempt: number = 1; attempt <= maxAttempts; attempt++) {
+
+        for (let attempt: number = 1; attempt <= this.maxAttempts; attempt++) {
             const html: string = await this.page.content();
             const imageFileHandle: FileHandle | undefined = withImage
                 ? await this.captureScreenshot(description)
@@ -53,7 +55,7 @@ export class AIHelper {
             const aiResponse: AIResponseDTO = await this.askQuestion(prompt, imageFileHandle);
             const selector: string = this.cleanSelector(aiResponse.response);
 
-            console.log(`AI identified selector for "${description}" (attempt ${attempt}/${maxAttempts}): "${selector}"`);
+            console.log(`AI identified selector for "${description}" (attempt ${attempt}/${this.maxAttempts}): "${selector}"`);
 
             if (!selector) {
                 console.warn(`Empty selector returned for "${description}", retrying...`);
@@ -66,7 +68,7 @@ export class AIHelper {
             }
         }
 
-        throw new Error(`Failed to find a relevant locator for "${description}" after ${maxAttempts} attempts`);
+        throw new Error(`Failed to find a relevant locator for "${description}" after ${this.maxAttempts} attempts`);
     }
 
     private async captureScreenshot(description: string): Promise<FileHandle> {

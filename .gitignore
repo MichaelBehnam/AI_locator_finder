@@ -9,3 +9,9 @@ node_modules/
 .env
 /.idea/
 /temp/
+
+# AI
+/.antigravitycli/
+/.claude/
+/.playwright/
+/.playwright-cli/

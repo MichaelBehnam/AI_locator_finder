@@ -89,7 +89,7 @@ const title = await smart.perform("read the page title");            // -> aiAct
 const ok    = await smart.perform("is the cart link visible");       // -> aiActions.isVisible(...)
 ```
 
-Under the hood, `perform` first asks the model to classify the instruction into a structured [`AIActionIntentDTO`](./aiActionIntent.dto.ts) — `{ action, target, value? }` — then routes that intent to the right `AIActions` call. The result is whatever the underlying action returns (`void`, `string`, `boolean`, …).
+Under the hood, `perform` is a thin two-step pipeline: it first calls `resolveIntent` to classify the instruction into a structured [`AIActionIntentDTO`](./aiActionIntent.dto.ts) — `{ action, target, value? }` — then routes that intent to the right `AIActions` call. The result is whatever the underlying action returns (`void`, `string`, `boolean`, …).
 
 ### Methods
 
@@ -99,7 +99,49 @@ Under the hood, `perform` first asks the model to classify the instruction into 
 | `performAll(instructions, withImage?, timeout?)` | Run a list of instructions in order, returning each step's result. |
 | `resolveIntent(instruction)` | Classify the instruction into an `AIActionIntentDTO` **without** executing it (handy for assertions/debugging). |
 
-The inferred `action` is one of the same verbs `AIActions` exposes: `click`, `doubleClick`, `fill`, `type`, `clear`, `getText`, `getAttribute`, `getInputValue`, `check`, `uncheck`, `selectOption`, `hover`, `press`, `isVisible`, `isChecked`, `waitFor`. For `fill`/`type` the model also returns the text, for `selectOption` the option, for `press` the key, and for `getAttribute` the attribute name.
+---
+
+### `resolveIntent` in depth
+
+`resolveIntent` is the classification brain behind `AISmartActions`. It turns one free-form instruction into a validated [`AIActionIntentDTO`](./aiActionIntent.dto.ts) — and **never touches the page**, which is what makes it safe to call in assertions and unit tests.
+
+```typescript
+resolveIntent(instruction: string): Promise<AIActionIntentDTO>;
+```
+
+The returned DTO has three fields:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `action` | `AIActionType` | One of the canonical verbs `AIActions` exposes (`click`, `fill`, `getText`, `check`, `waitFor`, …). |
+| `target` | `string` | A verb-free description of the element to act on, e.g. `"the blue login button"`. |
+| `value` | `string \| undefined` | The extra datum some actions need: text for `fill`/`type`, option for `selectOption`, key for `press`, attribute name for `getAttribute`, or wait state for `waitFor`. `undefined` when the action needs nothing. |
+
+#### How it works
+
+1. **Prompt assembly.** It pairs a *static* system prompt — the classifier rules loaded once from [skills/infer-action-intent.md](./skills/infer-action-intent.md) — with a tiny user prompt that is just `INSTRUCTION: "<your text>"`. Keeping the system prompt static and built only once lets LM Studio reuse it as a cached prompt prefix instead of re-evaluating the rules on every call.
+2. **Single model round-trip.** It sends both prompts to the model via `AIHelper.askQuestion`, asking for a single minified JSON object of the shape `{"action": "...", "target": "...", "value": "..."}` and nothing else.
+3. **Response parsing.** `parseIntent` strips any markdown/code fences, slices out the first `{ … }` block, and `JSON.parse`s it. A response with no JSON object, or invalid JSON, throws a descriptive error that includes the original instruction and raw response.
+4. **Action normalization.** The raw `action` string is lower-cased, stripped to letters, and looked up in an alias table, so loosely-formatted answers like `"double_click"`, `"DOUBLECLICK"`, `"tap"`, `"read"`, or `"get text"` all resolve to a canonical `AIActionType`. An action the table doesn't recognize throws rather than guessing.
+5. **Field fallbacks.** If the model omits or empties `target`, it falls back to the full instruction; an empty `value` becomes `undefined` so downstream checks can treat "no value" uniformly.
+6. **Return.** The validated `{ action, target, value }` DTO is logged and returned — no Playwright locator is resolved and no action is performed.
+
+#### Inspect an intent without acting
+
+Because it has no side effects, `resolveIntent` is ideal for asserting *what the model understood* before (or instead of) running it:
+
+```typescript
+const intent = await smart.resolveIntent("enter standard_user into the username field");
+expect(intent.action).toBe("fill");
+expect(intent.value).toBe("standard_user");
+// intent.target ~ "the username field" — nothing has been typed on the page yet.
+```
+
+`perform` is simply `resolveIntent` followed by an internal `dispatch(intent)`, so any instruction that `perform` can run, `resolveIntent` can explain first.
+
+#### Supported actions and their values
+
+The inferred `action` is one of the same verbs `AIActions` exposes: `click`, `doubleClick`, `fill`, `type`, `clear`, `getText`, `getAttribute`, `getInputValue`, `check`, `uncheck`, `selectOption`, `hover`, `press`, `isVisible`, `isChecked`, `waitFor`. For `fill`/`type` the model also returns the text, for `selectOption` the option, for `press` the key, for `getAttribute` the attribute name, and for `waitFor` the state (`"attached"`, `"visible"`, or `"hidden"`). When `dispatch` runs one of the value-requiring actions without a value, it throws so the failure is explicit rather than silent.
 
 ---
 

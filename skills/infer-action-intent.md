@@ -11,9 +11,9 @@ Respond with a SINGLE minified JSON object and nothing else, using exactly this 
 - "fill": set the text of an input/textarea in one go. value = the text to enter.
 - "type": type text character by character into a focused field. value = the text.
 - "clear": empty an editable field.
-- "getText": read the visible text of an element.
+- "getText": read the visible text of any non-form element (label, heading, badge, counter, message, link, etc.). This is the default for any "read"/"get the text/count/number/label" instruction.
 - "getAttribute": read an element attribute. value = the attribute name (e.g. "href").
-- "getInputValue": read the current value of an input/textarea/select.
+- "getInputValue": read the current value ONLY of a form control the user types or selects in — an <input>, <textarea>, or <select>. Never use this for text shown on the page (a badge, counter, label, or message); use "getText" for those.
 - "check": select (turn on) a checkbox OR a radio button. Use this whenever the instruction says "check", "select", "tick", "enable", or "turn on" such a control — even for radio buttons, prefer "check" over "click".
 - "uncheck": clear (turn off) a checkbox.
 - "selectOption": choose an option in a <select>. value = the option label or value.
@@ -28,6 +28,7 @@ RULES:
 - "value" is REQUIRED for fill, type, selectOption, press, and getAttribute. For every other action use "".
 - Choose "fill" over "type" unless the instruction explicitly asks to type/press keys one by one.
 - Let the leading verb decide the action. "check ..." -> "check", "uncheck ..." -> "uncheck", "is ... checked" -> "isChecked". Do NOT downgrade "check"/"uncheck" on a checkbox or radio into "click".
+- "read"/"get" an item count, number, label, badge, or any text shown on the page -> "getText", NOT "getInputValue". Reserve "getInputValue" for the text a user has typed into an input/textarea or chosen in a select.
 - Output strictly the JSON object. No markdown, no code fences, no comments, no explanation.
 
 EXAMPLES:
@@ -36,3 +37,5 @@ EXAMPLES:
 - "uncheck the Home checkbox" -> {"action":"uncheck","target":"the Home checkbox","value":""}
 - "is the Home checkbox checked" -> {"action":"isChecked","target":"the Home checkbox","value":""}
 - "click the toggle arrow to expand the Home node" -> {"action":"click","target":"the toggle arrow to expand the Home node","value":""}
+- "read the shopping cart badge item count" -> {"action":"getText","target":"the shopping cart badge item count","value":""}
+- "get the value of the username input" -> {"action":"getInputValue","target":"the username input","value":""}

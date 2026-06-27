@@ -5,11 +5,10 @@ import * as path from "path";
 import * as crypto from "crypto";
 import {AIResponseDTO} from "./aiResponse.dto";
 import {loadSkill} from "./skillLoader";
+import {AIConnection} from "./aiConnection";
 
 
 export class AIHelper {
-    readonly ip: string;
-    readonly port: string;
     readonly modelName: string;
     readonly maxAttempts: number;
     readonly client: LMStudioClient;
@@ -21,11 +20,12 @@ export class AIHelper {
 
     constructor(page: Page) {
         this.page = page;
-        this.ip = process.env.AI_IP ?? "127.0.0.1";
-        this.port = process.env.AI_PORT ?? "1234";
-        this.modelName = process.env.MODEL_NAME ?? "google/gemma-4-e4b";
-        this.maxAttempts = Number(process.env.MAX_ATTEMPTS) || 5;
-        this.client = new LMStudioClient({baseUrl: `ws://${this.ip}:${this.port}`});
+        // Reuse the single, shared LM Studio connection instead of opening a new
+        // one per helper/test. See {@link AIConnection}.
+        const connection: AIConnection = AIConnection.getInstance();
+        this.client = connection.client;
+        this.modelName = connection.modelName;
+        this.maxAttempts = connection.maxAttempts;
     }
 
     async askQuestion(question: string, image?: FileHandle, system?: string): Promise<AIResponseDTO> {

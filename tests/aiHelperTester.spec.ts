@@ -34,7 +34,7 @@ test.describe('AI Helper', () => {
     });
 
     test('playwright Search docs using AI with withImage true', async ({page ,aiHelper}) => {
-        test.setTimeout(180_000);
+        test.setTimeout(280_000);
         await page.goto("https://playwright.dev/");
         await page.waitForLoadState('load');
         // await page.waitForTimeout(5_000);

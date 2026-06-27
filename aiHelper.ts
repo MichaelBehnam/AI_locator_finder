@@ -52,6 +52,11 @@ export class AIHelper {
     async getLocatorFromAi(description: string, withImage: boolean = false): Promise<Locator> {
         console.log(`Generating locator for: "${description}"`);
 
+        // Whether the described interaction is text entry. If so, the located element
+        // must be editable; a <button>/<a> answer is rejected and re-queried instead of
+        // blindly trusted (it never can be filled).
+        const requiresEditable: boolean = this.descriptionRequiresEditable(description);
+        const rejectedSelectors: string[] = [];
 
         for (let attempt: number = 1; attempt <= this.maxAttempts; attempt++) {
             const html: string = await this.page.content();
@@ -59,7 +64,7 @@ export class AIHelper {
                 ? await this.captureScreenshot(description)
                 : undefined;
 
-            const userPrompt: string = this.buildUserPrompt(html, description);
+            const userPrompt: string = this.buildUserPrompt(html, description, rejectedSelectors);
             const aiResponse: AIResponseDTO = await this.askQuestion(userPrompt, imageFileHandle, this.buildSystemPrompt());
             const selector: string = this.cleanSelector(aiResponse.response);
 
@@ -71,12 +76,35 @@ export class AIHelper {
             }
 
             const locator: Locator | undefined = await this.resolveLocator(selector, description);
-            if (locator) {
-                return locator;
+            if (!locator) {
+                continue;
             }
+
+            if (requiresEditable && !(await this.isLocatorEditable(locator))) {
+                console.warn(`Selector "${selector}" for "${description}" matched a non-editable element (e.g. a <button>) but the description requires text entry; rejecting and retrying...`);
+                rejectedSelectors.push(selector);
+                continue;
+            }
+
+            return locator;
         }
 
         throw new Error(`Failed to find a relevant locator for "${description}" after ${this.maxAttempts} attempts`);
+    }
+
+    /** Heuristic: does the description ask for typing into an editable element? */
+    private descriptionRequiresEditable(description: string): boolean {
+        return /\b(input|type|typing|fill(ing)?|enter(ing)?\s+text|search\s*(box|field|bar)|text\s*(box|field|area)|textarea|editable|write)\b/i.test(description);
+    }
+
+    /** True when the resolved element accepts text entry (input/textarea/contenteditable). */
+    private async isLocatorEditable(locator: Locator): Promise<boolean> {
+        try {
+            return await locator.isEditable({timeout: 2_000});
+        } catch {
+            // isEditable throws for non-editable tags (<button>, <a>, …) → treat as not editable.
+            return false;
+        }
     }
 
     private async captureScreenshot(description: string): Promise<FileHandle> {
@@ -103,13 +131,16 @@ export class AIHelper {
 
             this.xpathSystemPrompt = `You are a helper that finds a Playwright locator/selector for a given element in the HTML.
 
-INSTRUCTIONS:
-1. If the target element has a unique 'id' attribute, you must use it (e.g. "#id-value" or "//*[@id='id-value']").
-2. If the target element has a unique 'data-test' or 'data-testid' or 'name' attribute, you must use it (e.g. "[data-test='value']" or "//*[@data-test='value']").
-3. Pay attention to all kinds of elements based on the implied action:
-   - If the description implies a "click" action, the target is usually a <button>, <a>, or similar interactive element.
-   - If the description implies "entering text","input field", "inputting", or "searching", the target element MUST be an editable element such as an <input>, <textarea>, or a [contenteditable] element (which can be a <div> or <p>). You MUST NOT return a <button> or a non-editable container.
-4. Make sure the tag name (e.g. "input", "button", "a", "div") in your selector matches the tag name of the actual target element in the HTML. Do not confuse a container (like a <div>) with the interactive element itself unless the container is the intended interactive element.
+INSTRUCTIONS (apply strictly in this order):
+1. FIRST, decide the REQUIRED element TYPE from the described interaction. This is a hard filter that you MUST apply before looking at any attributes:
+   - If the description implies a "click", "press", "open", "submit", or selecting a link/button, the target is an interactive element such as <button>, <a>, or [role='button'].
+   - If the description implies "entering text", "input field", "search box/field", "inputting", "typing", "searching", or "filling", the target MUST be an editable element: an <input>, <textarea>, or a [contenteditable] element (which can be a <div> or <p>). You MUST NOT return a <button>, <a>, <label>, or any non-editable container — even if its text, 'aria-label', or 'id' semantically matches the description. For example, a "Search" button that opens a search box is NOT the editable field; you must pick the actual <input>, not the trigger button.
+2. Choose the element matching the description ONLY from among the elements of that required type.
+3. THEN build the selector for that chosen element, preferring in this order:
+   a. a unique 'id' (e.g. "#id-value" or "//*[@id='id-value']").
+   b. a unique 'data-test' / 'data-testid' / 'name' attribute (e.g. "[data-test='value']" or "//*[@data-test='value']").
+   c. otherwise a unique 'aria-label', visible text, or structural XPath.
+4. Make sure the tag name (e.g. "input", "button", "a", "div") in your selector matches the tag name of the actual target element in the HTML. Do not confuse a container or a trigger element with the interactive element itself.
 5. ***When possible, prefer using an XPath selector*** and return ONLY the raw XPath selector or CSS selector ONLY that can be passed directly to Playwright's page.locator() (e.g. "#login-button", "input[type='submit']", or "//button[text()='Login']").
 6. Keep it as short and precise as possible.
 Do not include any other text, markdown formatting (like code blocks with \`\`\`), explanation, or other code. Return strictly the selector string itself.
@@ -125,11 +156,15 @@ ${xpathSkills}`;
      * Variable part of the request. The page HTML comes first (stable across element
      * lookups on the same page → also cacheable) and the per-call description last.
      */
-    private buildUserPrompt(html: string, description: string): string {
+    private buildUserPrompt(html: string, description: string, rejectedSelectors: string[] = []): string {
+        const avoid: string = rejectedSelectors.length > 0
+            ? `\n\nDO NOT return any of these selectors — they matched a non-editable element (such as a <button>) but the description requires an editable input. Find the actual editable element instead: ${rejectedSelectors.map((s: string) => `"${s}"`).join(", ")}.`
+            : "";
+
         return `Given the following HTML of the page:
 ${html}
 
-***FIND THE LOCATOR/SELECTOR FOR THE ELEMENT DESCRIBED AS: "${description}"***`;
+***FIND THE LOCATOR/SELECTOR FOR THE ELEMENT DESCRIBED AS: "${description}"***${avoid}`;
     }
 
     private cleanSelector(rawResponse: string): string {

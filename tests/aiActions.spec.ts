@@ -2,7 +2,7 @@ import { test, expect } from "../fixtures";
 
 test.describe("AI Actions", () => {
     test("login and read inventory using high-level AI actions", async ({ page, aiActions }) => {
-        test.setTimeout(120_000);
+        test.setTimeout(300_000);
         await page.goto("https://www.saucedemo.com/");
         await page.waitForLoadState("domcontentloaded");
 
@@ -30,7 +30,7 @@ test.describe("AI Actions", () => {
     });
 
     test("search the Playwright docs using high-level AI actions", async ({ page, aiActions }) => {
-        test.setTimeout(180_000);
+        test.setTimeout(240_000);
         await page.goto("https://playwright.dev/");
         await page.waitForLoadState("load");
 

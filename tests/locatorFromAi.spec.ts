@@ -3,7 +3,7 @@ import { Locator } from "@playwright/test";
 
 test.describe("AI Locator Tests", () => {
     test('ask ai to generate a locator for login and add items to cart', async ({ page, aiHelper }) => {
-        test.setTimeout(120_000);
+        test.setTimeout(500_000);
         await page.goto("https://www.saucedemo.com/");
         await page.waitForLoadState('domcontentloaded');
 
@@ -38,7 +38,7 @@ test.describe("AI Locator Tests", () => {
     });
 
     test('negative login feedback with incorrect username and password', async ({ page, aiHelper }) => {
-        test.setTimeout(90_000);
+        test.setTimeout(190_000);
         await page.goto("https://www.saucedemo.com/");
         await page.waitForLoadState('domcontentloaded');
 

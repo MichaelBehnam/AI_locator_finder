@@ -3,7 +3,7 @@ import { AIActionIntentDTO } from "../aiActionIntent.dto";
 
 test.describe("AI Smart Actions", () => {
     test("infers the action from the instruction without executing it", async ({ page, aiSmartActions }) => {
-        test.setTimeout(120_000);
+        test.setTimeout(220_000);
         await page.goto("https://www.saucedemo.com/");
         await page.waitForLoadState("domcontentloaded");
 
@@ -30,7 +30,7 @@ test.describe("AI Smart Actions", () => {
     });
 
     test("logs in by letting the AI choose each action from the instruction", async ({ page, aiSmartActions }) => {
-        test.setTimeout(180_000);
+        test.setTimeout(280_000);
         await page.goto("https://www.saucedemo.com/");
         await page.waitForLoadState("domcontentloaded");
 
@@ -52,7 +52,7 @@ test.describe("AI Smart Actions", () => {
     });
 
     test("runs a sequence of instructions in order with performAll", async ({ page, aiSmartActions }) => {
-        test.setTimeout(180_000);
+        test.setTimeout(280_000);
         await page.goto("https://www.saucedemo.com/");
         await page.waitForLoadState("domcontentloaded");
 

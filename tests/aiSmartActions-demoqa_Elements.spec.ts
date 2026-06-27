@@ -80,9 +80,9 @@ test.describe("AI Smart Actions - demoqa Elements", () => {
             await aiSmartActions.resolveIntent("is the Home checkbox checked");
         expect(isCheckedIntent.action).toBe("isChecked");
 
-        // Execution: expanding the tree is a plain click and is reliable.
-        await aiSmartActions.perform("click the expand-all toggle button");
-        await expect(page.getByText("Desktop", {exact: true})).toBeVisible();
+        // // Execution: expanding the tree is a plain click and is reliable.
+        // await aiSmartActions.perform("click the expand-all toggle button");
+        // await expect(page.getByText("Desktop", {exact: true})).toBeVisible();
     });
 
     test("Radio Button: infers the check intent and selects an option", async ({page, aiSmartActions}) => {

@@ -7,6 +7,12 @@ import {AIResponseDTO} from "./aiResponse.dto";
 import {loadSkill} from "./skillLoader";
 import {AIConnection} from "./aiConnection";
 
+/** A selector the model returned that was rejected, paired with the reason, so the
+ *  next attempt can be told what to avoid and why. */
+interface RejectedSelector {
+    selector: string;
+    reason: string;
+}
 
 export class AIHelper {
     readonly modelName: string;
@@ -56,7 +62,7 @@ export class AIHelper {
         // must be editable; a <button>/<a> answer is rejected and re-queried instead of
         // blindly trusted (it never can be filled).
         const requiresEditable: boolean = this.descriptionRequiresEditable(description);
-        const rejectedSelectors: string[] = [];
+        const rejectedSelectors: RejectedSelector[] = [];
 
         for (let attempt: number = 1; attempt <= this.maxAttempts; attempt++) {
             const html: string = this.sanitizeHtml(await this.page.content());
@@ -82,8 +88,23 @@ export class AIHelper {
 
             if (requiresEditable && !(await this.isLocatorEditable(locator))) {
                 console.warn(`Selector "${selector}" for "${description}" matched a non-editable element (e.g. a <button>) but the description requires text entry; rejecting and retrying...`);
-                rejectedSelectors.push(selector);
+                rejectedSelectors.push({selector, reason: "it matched a non-editable element (such as a <button>) but the description requires an editable input"});
                 continue;
+            }
+
+            // A selector that matches more than one element makes every Playwright
+            // action throw a strict-mode violation. Ask the model to refine it into a
+            // unique one; only if it still can't on the final attempt do we fall back
+            // to the first match so the action can proceed instead of hard-crashing.
+            const matchCount: number = await locator.count();
+            if (matchCount > 1) {
+                if (attempt < this.maxAttempts) {
+                    console.warn(`Selector "${selector}" for "${description}" matched ${matchCount} elements (not unique); rejecting and retrying...`);
+                    rejectedSelectors.push({selector, reason: `it matched ${matchCount} elements but a unique selector matching exactly one element is required`});
+                    continue;
+                }
+                console.warn(`Selector "${selector}" for "${description}" matched ${matchCount} elements on the final attempt; falling back to the first match.`);
+                return locator.first();
             }
 
             return locator;
@@ -178,9 +199,9 @@ ${xpathSkills}`;
      * Variable part of the request. The page HTML comes first (stable across element
      * lookups on the same page → also cacheable) and the per-call description last.
      */
-    private buildUserPrompt(html: string, description: string, rejectedSelectors: string[] = []): string {
+    private buildUserPrompt(html: string, description: string, rejectedSelectors: RejectedSelector[] = []): string {
         const avoid: string = rejectedSelectors.length > 0
-            ? `\n\nDO NOT return any of these selectors — they matched a non-editable element (such as a <button>) but the description requires an editable input. Find the actual editable element instead: ${rejectedSelectors.map((s: string) => `"${s}"`).join(", ")}.`
+            ? `\n\nDO NOT return any of these previously-rejected selectors — for each, the reason it was rejected is given. Return a different, correct selector instead:\n${rejectedSelectors.map((r: RejectedSelector) => `- "${r.selector}" — ${r.reason}.`).join("\n")}`
             : "";
 
         return `Given the following HTML of the page:

@@ -14,7 +14,29 @@ export type MyWorkerFixtures = {
     aiConnection: AIConnection;
 };
 
+/**
+ * Third-party ad / analytics hosts that demoqa (and similar sites) pull in.
+ * In headed runs these inject tens of thousands of tokens of ad DOM into the
+ * page, which then gets serialized into the locator prompt and blows past the
+ * model's context window ("n_keep >= n_ctx"). Blocking the requests keeps the
+ * DOM lean (and the tests faster and more deterministic).
+ */
+const BLOCKED_RESOURCE_HOSTS: RegExp =
+    /(googlesyndication|doubleclick|googletagmanager|google-analytics|googleadservices|adservice\.google|pagead2|fundingchoicesmessages|amazon-adsystem|adsafeprotected|adnxs|moatads|scorecardresearch|quantserve)\./i;
+
 export const test = base.extend<MyFixtures, MyWorkerFixtures>({
+    // Block ad/analytics traffic before any navigation so the page DOM stays small
+    // enough to fit the model's context window. See {@link BLOCKED_RESOURCE_HOSTS}.
+    page: async ({page}, use) => {
+        await page.route("**/*", (route) => {
+            if (BLOCKED_RESOURCE_HOSTS.test(route.request().url())) {
+                return route.abort();
+            }
+            return route.continue();
+        });
+        await use(page);
+    },
+
     // Worker-scoped: establish the single LM Studio connection once (lazily, the
     // first time an AI fixture is used in this worker) and disconnect it once,
     // after all tests in the worker have finished.

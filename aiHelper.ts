@@ -59,7 +59,7 @@ export class AIHelper {
         const rejectedSelectors: string[] = [];
 
         for (let attempt: number = 1; attempt <= this.maxAttempts; attempt++) {
-            const html: string = await this.page.content();
+            const html: string = this.sanitizeHtml(await this.page.content());
             const imageFileHandle: FileHandle | undefined = withImage
                 ? await this.captureScreenshot(description)
                 : undefined;
@@ -150,6 +150,28 @@ ${xpathSkills}`;
         }
 
         return this.xpathSystemPrompt;
+    }
+
+    /**
+     * Strip the token-heavy, locator-irrelevant parts of the page so the prompt fits
+     * the model's context window. Raw page HTML (especially on ad-laden pages like
+     * demoqa) easily exceeds the model's `n_ctx`, which makes LM Studio reject the
+     * request with "n_keep >= n_ctx" before it generates anything.
+     *
+     * We drop <script>/<style>/<svg>/<noscript> blocks and HTML comments entirely —
+     * none of them are needed to find a Playwright selector — then collapse runs of
+     * whitespace. The interactive elements and their id/name/aria/text attributes,
+     * which are all the model actually needs, are preserved.
+     */
+    private sanitizeHtml(html: string): string {
+        return html
+            .replace(/<!--[\s\S]*?-->/g, "")
+            .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+            .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
+            .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, "")
+            .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, "")
+            .replace(/\s+/g, " ")
+            .trim();
     }
 
     /**

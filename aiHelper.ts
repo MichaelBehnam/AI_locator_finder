@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import {AIResponseDTO} from "./aiResponse.dto";
+import {loadSkill} from "./skillLoader";
 
 
 export class AIHelper {
@@ -14,6 +15,10 @@ export class AIHelper {
     readonly client: LMStudioClient;
     readonly page: Page;
 
+    /** Static system prompt (role + instructions + xpath skill), built once and reused
+     *  so it stays a stable cached prefix across every prediction. */
+    private xpathSystemPrompt?: string;
+
     constructor(page: Page) {
         this.page = page;
         this.ip = process.env.AI_IP ?? "127.0.0.1";
@@ -23,12 +28,15 @@ export class AIHelper {
         this.client = new LMStudioClient({baseUrl: `ws://${this.ip}:${this.port}`});
     }
 
-    async askQuestion(question: string, image?: FileHandle): Promise<AIResponseDTO> {
+    async askQuestion(question: string, image?: FileHandle, system?: string): Promise<AIResponseDTO> {
         const model: LLM = await this.client.llm.model(this.modelName);
 
-        const result: PredictionResult = await model.respond([
-            {role: "user", content: question, images: image ? [image] : undefined}
-        ]);
+        const messages = [
+            ...(system ? [{role: "system" as const, content: system}] : []),
+            {role: "user" as const, content: question, images: image ? [image] : undefined}
+        ];
+
+        const result: PredictionResult = await model.respond(messages);
 
         const incomingTokens: number = result.stats?.promptTokensCount ?? 0;
         const outgoingTokens: number = result.stats?.predictedTokensCount ?? 0;
@@ -51,8 +59,8 @@ export class AIHelper {
                 ? await this.captureScreenshot(description)
                 : undefined;
 
-            const prompt: string = this.buildPrompt(html, description);
-            const aiResponse: AIResponseDTO = await this.askQuestion(prompt, imageFileHandle);
+            const userPrompt: string = this.buildUserPrompt(html, description);
+            const aiResponse: AIResponseDTO = await this.askQuestion(userPrompt, imageFileHandle, this.buildSystemPrompt());
             const selector: string = this.cleanSelector(aiResponse.response);
 
             console.log(`AI identified selector for "${description}" (attempt ${attempt}/${this.maxAttempts}): "${selector}"`);
@@ -84,22 +92,16 @@ export class AIHelper {
         return this.client.files.prepareImage(tempFilePath);
     }
 
-    private loadXpathSkills(): string {
-        try {
-            return fs.readFileSync(path.join(__dirname, "skills", "get-xpath.md"), "utf8");
-        } catch (error: unknown) {
-            throw ("Could not read skills/get-xpath.md guidelines, proceeding without it:" + error);
-        }
-    }
+    /**
+     * Static instructions + xpath skill. Kept identical across every call (and lazily
+     * built once) so LM Studio can reuse this as a cached prompt prefix instead of
+     * re-evaluating the skill on each prediction.
+     */
+    private buildSystemPrompt(): string {
+        if (this.xpathSystemPrompt === undefined) {
+            const xpathSkills: string = loadSkill("get-xpath.md");
 
-    private buildPrompt(html: string, description: string): string {
-        const xpathSkills: string = this.loadXpathSkills();
-
-        return `You are a helper that finds a Playwright locator/selector for a given element in the HTML.
-Given the following HTML of the page:
-${html}
-
-***FIND THE LOCATOR/SELECTOR FOR THE ELEMENT DESCRIBED AS: "${description}"***
+            this.xpathSystemPrompt = `You are a helper that finds a Playwright locator/selector for a given element in the HTML.
 
 INSTRUCTIONS:
 1. If the target element has a unique 'id' attribute, you must use it (e.g. "#id-value" or "//*[@id='id-value']").
@@ -114,6 +116,20 @@ Do not include any other text, markdown formatting (like code blocks with \`\`\`
 
 Additional reference guidelines:
 ${xpathSkills}`;
+        }
+
+        return this.xpathSystemPrompt;
+    }
+
+    /**
+     * Variable part of the request. The page HTML comes first (stable across element
+     * lookups on the same page → also cacheable) and the per-call description last.
+     */
+    private buildUserPrompt(html: string, description: string): string {
+        return `Given the following HTML of the page:
+${html}
+
+***FIND THE LOCATOR/SELECTOR FOR THE ELEMENT DESCRIBED AS: "${description}"***`;
     }
 
     private cleanSelector(rawResponse: string): string {

@@ -2,6 +2,7 @@ import {AIHelper} from "./aiHelper";
 import {AIActions} from "./aiActions";
 import {AIResponseDTO} from "./aiResponse.dto";
 import {AIActionIntentDTO, AIActionType} from "./aiActionIntent.dto";
+import {loadSkill} from "./skillLoader";
 
 type WaitForState = "attached" | "visible" | "hidden";
 
@@ -57,6 +58,9 @@ export class AISmartActions {
     private readonly aiHelper: AIHelper;
     private readonly aiActions: AIActions;
 
+    /** Static intent-classifier system prompt, built once so it stays a cached prefix. */
+    private intentSystemPrompt?: string;
+
     constructor(aiHelper: AIHelper, aiActions: AIActions = new AIActions(aiHelper)) {
         this.aiHelper = aiHelper;
         this.aiActions = aiActions;
@@ -91,8 +95,11 @@ export class AISmartActions {
      * without executing anything. Useful for asserting the inferred action in tests.
      */
     async resolveIntent(instruction: string): Promise<AIActionIntentDTO> {
-        const prompt: string = this.buildIntentPrompt(instruction);
-        const aiResponse: AIResponseDTO = await this.aiHelper.askQuestion(prompt);
+        const aiResponse: AIResponseDTO = await this.aiHelper.askQuestion(
+            this.buildIntentUserPrompt(instruction),
+            undefined,
+            this.buildIntentSystemPrompt()
+        );
         const intent: AIActionIntentDTO = this.parseIntent(aiResponse.response, instruction);
 
         console.log(
@@ -166,39 +173,21 @@ export class AISmartActions {
         return "visible";
     }
 
-    private buildIntentPrompt(instruction: string): string {
-        return `You are an intent classifier for browser UI automation.
-Given a single natural-language INSTRUCTION, decide which ONE automation action the user wants,
-identify the target element to act on, and extract any value the action needs.
+    /**
+     * Static classifier rules. Identical for every instruction (and built once) so
+     * LM Studio reuses it as a cached prompt prefix instead of re-evaluating it each call.
+     * Loaded from skills/infer-action-intent.md.
+     */
+    private buildIntentSystemPrompt(): string {
+        if (this.intentSystemPrompt === undefined) {
+            this.intentSystemPrompt = loadSkill("infer-action-intent.md");
+        }
+        return this.intentSystemPrompt;
+    }
 
-INSTRUCTION: "${instruction}"
-
-Respond with a SINGLE minified JSON object and nothing else, using exactly this shape:
-{"action":"<action>","target":"<element description>","value":"<value or empty string>"}
-
-<action> MUST be exactly one of:
-- "click": press a button, link, checkbox-as-button, or other clickable element.
-- "doubleClick": double-click an element.
-- "fill": set the text of an input/textarea in one go. value = the text to enter.
-- "type": type text character by character into a focused field. value = the text.
-- "clear": empty an editable field.
-- "getText": read the visible text of an element.
-- "getAttribute": read an element attribute. value = the attribute name (e.g. "href").
-- "getInputValue": read the current value of an input/textarea/select.
-- "check": check a checkbox or radio.
-- "uncheck": uncheck a checkbox.
-- "selectOption": choose an option in a <select>. value = the option label or value.
-- "hover": move the pointer over an element.
-- "press": focus an element and press a key. value = the key (e.g. "Enter").
-- "isVisible": check whether an element is visible.
-- "isChecked": check whether a checkbox/radio is checked.
-- "waitFor": wait for an element. value = one of "attached", "visible", "hidden".
-
-RULES:
-- "target" describes ONLY the element (no verbs). e.g. instruction "click the blue login button" -> target "the blue login button".
-- "value" is REQUIRED for fill, type, selectOption, press, and getAttribute. For every other action use "".
-- Choose "fill" over "type" unless the instruction explicitly asks to type/press keys one by one.
-- Output strictly the JSON object. No markdown, no code fences, no comments, no explanation.`;
+    /** Variable part of the request: just the instruction to classify. */
+    private buildIntentUserPrompt(instruction: string): string {
+        return `INSTRUCTION: "${instruction}"`;
     }
 
     /** Strip markdown/quotes, parse the JSON object, and validate it. */

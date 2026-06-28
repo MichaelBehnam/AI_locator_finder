@@ -216,6 +216,8 @@ export class AISmartActions {
             ? parsed.value
             : undefined;
 
+        console.log(`Parsed intent for "${instruction}": action=${action}, target="${target}"` + (value ? `, value="${value}"` : ""));
+
         return {action, target, value};
     }
 

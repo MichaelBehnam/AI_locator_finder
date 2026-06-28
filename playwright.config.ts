@@ -23,28 +23,29 @@ export default defineConfig({
     retries: process.env.CI ? 2 : 0,
     /* Opt out of parallel tests to avoid overloading local LLM. */
     workers: 1,
-    /* Reporter to use. See https://playwright.dev/docs/test-reporters */
     reporter: [['html', {open: 'never'}]],
-    /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
     use: {
 
         /* Maximum time each action (click, fill, etc.) can take. Kept generous to
            account for AI-located actions resolving selectors at runtime. */
         actionTimeout: 5_000,
-
-        /* Maximum time page.goto / navigation actions can take. */
         navigationTimeout: 30_000,
 
-        /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
         trace: 'on',
         headless: false,
     },
 
-    /* Configure projects for major browsers */
     projects: [
         {
             name: 'chromium',
-            use: {...devices['Desktop Chrome']},
+            use: {
+                ...devices['Desktop Chrome'],
+                viewport: {width: 1920, height: 937},
+                launchOptions: {
+                    chromiumSandbox: true
+                }
+            },
+
         }
     ]
 

@@ -5,11 +5,16 @@ import * as path from "path";
 import * as crypto from "crypto";
 import {AIResponseDTO} from "./aiResponse.dto";
 import {loadSkill} from "./skillLoader";
+import {AIConnection} from "./aiConnection";
 
+/** A selector the model returned that was rejected, paired with the reason, so the
+ *  next attempt can be told what to avoid and why. */
+interface RejectedSelector {
+    selector: string;
+    reason: string;
+}
 
 export class AIHelper {
-    readonly ip: string;
-    readonly port: string;
     readonly modelName: string;
     readonly maxAttempts: number;
     readonly client: LMStudioClient;
@@ -21,11 +26,12 @@ export class AIHelper {
 
     constructor(page: Page) {
         this.page = page;
-        this.ip = process.env.AI_IP ?? "127.0.0.1";
-        this.port = process.env.AI_PORT ?? "1234";
-        this.modelName = process.env.MODEL_NAME ?? "google/gemma-4-e4b";
-        this.maxAttempts = Number(process.env.MAX_ATTEMPTS) || 5;
-        this.client = new LMStudioClient({baseUrl: `ws://${this.ip}:${this.port}`});
+        // Reuse the single, shared LM Studio connection instead of opening a new
+        // one per helper/test. See {@link AIConnection}.
+        const connection: AIConnection = AIConnection.getInstance();
+        this.client = connection.client;
+        this.modelName = connection.modelName;
+        this.maxAttempts = connection.maxAttempts;
     }
 
     async askQuestion(question: string, image?: FileHandle, system?: string): Promise<AIResponseDTO> {
@@ -56,10 +62,10 @@ export class AIHelper {
         // must be editable; a <button>/<a> answer is rejected and re-queried instead of
         // blindly trusted (it never can be filled).
         const requiresEditable: boolean = this.descriptionRequiresEditable(description);
-        const rejectedSelectors: string[] = [];
+        const rejectedSelectors: RejectedSelector[] = [];
 
         for (let attempt: number = 1; attempt <= this.maxAttempts; attempt++) {
-            const html: string = await this.page.content();
+            const html: string = this.sanitizeHtml(await this.page.content());
             const imageFileHandle: FileHandle | undefined = withImage
                 ? await this.captureScreenshot(description)
                 : undefined;
@@ -82,8 +88,23 @@ export class AIHelper {
 
             if (requiresEditable && !(await this.isLocatorEditable(locator))) {
                 console.warn(`Selector "${selector}" for "${description}" matched a non-editable element (e.g. a <button>) but the description requires text entry; rejecting and retrying...`);
-                rejectedSelectors.push(selector);
+                rejectedSelectors.push({selector, reason: "it matched a non-editable element (such as a <button>) but the description requires an editable input"});
                 continue;
+            }
+
+            // A selector that matches more than one element makes every Playwright
+            // action throw a strict-mode violation. Ask the model to refine it into a
+            // unique one; only if it still can't on the final attempt do we fall back
+            // to the first match so the action can proceed instead of hard-crashing.
+            const matchCount: number = await locator.count();
+            if (matchCount > 1) {
+                if (attempt < this.maxAttempts) {
+                    console.warn(`Selector "${selector}" for "${description}" matched ${matchCount} elements (not unique); rejecting and retrying...`);
+                    rejectedSelectors.push({selector, reason: `it matched ${matchCount} elements but a unique selector matching exactly one element is required`});
+                    continue;
+                }
+                console.warn(`Selector "${selector}" for "${description}" matched ${matchCount} elements on the final attempt; falling back to the first match.`);
+                return locator.first();
             }
 
             return locator;
@@ -153,12 +174,34 @@ ${xpathSkills}`;
     }
 
     /**
+     * Strip the token-heavy, locator-irrelevant parts of the page so the prompt fits
+     * the model's context window. Raw page HTML (especially on ad-laden pages like
+     * demoqa) easily exceeds the model's `n_ctx`, which makes LM Studio reject the
+     * request with "n_keep >= n_ctx" before it generates anything.
+     *
+     * We drop <script>/<style>/<svg>/<noscript> blocks and HTML comments entirely —
+     * none of them are needed to find a Playwright selector — then collapse runs of
+     * whitespace. The interactive elements and their id/name/aria/text attributes,
+     * which are all the model actually needs, are preserved.
+     */
+    private sanitizeHtml(html: string): string {
+        return html
+            .replace(/<!--[\s\S]*?-->/g, "")
+            .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+            .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
+            .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, "")
+            .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, "")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    /**
      * Variable part of the request. The page HTML comes first (stable across element
      * lookups on the same page → also cacheable) and the per-call description last.
      */
-    private buildUserPrompt(html: string, description: string, rejectedSelectors: string[] = []): string {
+    private buildUserPrompt(html: string, description: string, rejectedSelectors: RejectedSelector[] = []): string {
         const avoid: string = rejectedSelectors.length > 0
-            ? `\n\nDO NOT return any of these selectors — they matched a non-editable element (such as a <button>) but the description requires an editable input. Find the actual editable element instead: ${rejectedSelectors.map((s: string) => `"${s}"`).join(", ")}.`
+            ? `\n\nDO NOT return any of these previously-rejected selectors — for each, the reason it was rejected is given. Return a different, correct selector instead:\n${rejectedSelectors.map((r: RejectedSelector) => `- "${r.selector}" — ${r.reason}.`).join("\n")}`
             : "";
 
         return `Given the following HTML of the page:

@@ -6,7 +6,7 @@
   "scripts": {
     "test": "playwright test tests/locatorFromAi.spec.ts",
     "AI:test": "playwright test tests/aiHelperTester.spec.ts",
-    "All:test": "playwright test tests/",
+    "All:test": "playwright test",
     "show-report": "npx playwright show-report",
     "show-trace": "npx playwright show-trace"
   },
